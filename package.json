@@ -1,0 +1,14 @@
+{
+  "name": "bestprice",
+  "version": "1.0.0",
+  "description": "End-to-end test automation framework for [bestprice.com.ua](https://bestprice.com.ua) built with **TypeScript** and **Playwright**. The framework follows the Page Object Model, supports parallel cross-browser execution, and produces rich HTML/Allure reports out of the box.",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^25.6.0"
+  }
+}

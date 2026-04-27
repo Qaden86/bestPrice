@@ -1,5 +1,5 @@
 import { test as base, expect } from '@playwright/test';
-import { Header } from './components/Header';
+import { Header } from '../components/Header';
 
 type Fixtures = {
   header: Header;

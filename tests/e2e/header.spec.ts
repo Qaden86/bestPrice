@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect } from '../../src/fixtures';
 
 test.describe('Header — desktop', () => {
   test('top bar shows phone, working hours and auth link', async ({ header }) => {

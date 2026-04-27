@@ -1,33 +1,25 @@
-import { test, expect } from '@playwright/test';
-import { Header } from './components/Header';
+import { test, expect } from './fixtures';
 
 test.describe('Header — desktop', () => {
-  let header: Header;
-
-  test.beforeEach(async ({ page }) => {
-    header = new Header(page);
-    await page.goto('/');
-    await header.expectVisible();
-  });
-
-  test('shows top-bar contacts and auth link', async ({ page }) => {
+  test('top bar shows phone, working hours and auth link', async ({ header }) => {
     await expect(header.phoneLink).toBeVisible();
-    await expect(header.phoneLink).toHaveAttribute('href', /^tel:\+?\d+$/);
+    await expect(header.phoneLink).toHaveAttribute('href', 'tel:+380988584035');
     await expect(header.workingHours).toBeVisible();
 
     await expect(header.topBarAuthLink).toBeVisible();
-    await expect(header.topBarAuthLink).toHaveAttribute('href', /\/(vkhid|kabinet)/);
+    await expect(header.topBarAuthLink).toHaveText('Увійти');
+    await expect(header.topBarAuthLink).toHaveAttribute('href', '/vkhid');
   });
 
-  test('logo navigates back to home', async ({ page }) => {
+  test('logo returns to home from a sub-page', async ({ header, page }) => {
     await header.openTopBarAuth();
-    await expect(page).not.toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/vkhid(?:[/?#]|$)/);
 
     await header.goToHome();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL('/');
   });
 
-  test('exposes catalog button, search and account controls', async () => {
+  test('main bar exposes catalog, search and account controls', async ({ header }) => {
     await expect(header.catalogButton).toBeVisible();
     await expect(header.searchInput).toBeVisible();
     await expect(header.searchInput).toHaveAttribute('placeholder', 'Пошук товарів...');
@@ -36,41 +28,33 @@ test.describe('Header — desktop', () => {
     await expect(header.cartButton).toBeVisible();
   });
 
-  test('search submits via the button', async ({ page }) => {
+  test('search button submits the query to /poshuk', async ({ header, page }) => {
     await header.submitSearch('генератор');
-    await expect(page).not.toHaveURL(/\/$/);
-    await expect(page.url()).toContain;
-    expect(page.url()).toMatch(/poshuk|search|q=/i);
+    await expect(page).toHaveURL(/\/poshuk(?:[/?#]|$)/);
   });
 
-  test('typing into search opens the autocomplete listbox', async ({ page }) => {
-    await header.searchInput.fill('дриль');
+  test('typing into search opens the autocomplete listbox', async ({ header }) => {
+    await header.typeSearch('дриль');
     await expect(header.searchInput).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.getByRole('listbox')).toBeVisible();
+    await expect(header.searchListbox).toBeVisible();
   });
 
-  test('header stays in viewport while scrolling (sticky)', async ({ page }) => {
+  test('header stays in viewport while scrolling (sticky)', async ({ header, page }) => {
     await page.mouse.wheel(0, 2000);
     await expect(header.root).toBeInViewport();
   });
 
-  test('favorites link routes away from home', async ({ page }) => {
+  test('favorites link routes to /coming-soon', async ({ header, page }) => {
     await header.openFavorites();
-    await expect(page).not.toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/coming-soon(?:[/?#]|$)/);
   });
 
-  test('cart trigger reacts to click', async ({ page }) => {
+  test('cart trigger opens the cart dialog', async ({ header, page }) => {
     await header.openCart();
-    const navigated = !page.url().endsWith('/');
-    const dialogVisible = await page
-      .getByRole('dialog')
-      .first()
-      .isVisible()
-      .catch(() => false);
-    expect(navigated || dialogVisible).toBe(true);
+    await expect(page.getByRole('dialog').first()).toBeVisible();
   });
 
-  test('mobile-only controls are hidden on desktop', async () => {
+  test('mobile-only controls are hidden on desktop', async ({ header }) => {
     await expect(header.openMobileMenuButton).toBeHidden();
   });
 });
@@ -78,40 +62,32 @@ test.describe('Header — desktop', () => {
 test.describe('Header — mobile', () => {
   test.use({ viewport: { width: 393, height: 851 }, isMobile: true, hasTouch: true });
 
-  let header: Header;
-
-  test.beforeEach(async ({ page }) => {
-    header = new Header(page);
-    await page.goto('/');
-    await header.expectVisible();
-  });
-
-  test('shows mobile menu trigger and inline search bar', async () => {
+  test('shows mobile menu trigger and inline search bar', async ({ header }) => {
     await expect(header.openMobileMenuButton).toBeVisible();
     await expect(header.searchInput).toBeVisible();
     await expect(header.catalogButton).toBeHidden();
   });
 
-  test('drawer opens and closes', async () => {
+  test('drawer opens, lists nav items and closes', async ({ header }) => {
     await header.expectMobileMenuClosed();
 
     await header.openMobileMenu();
     await expect(header.mobileMenuNav).toBeVisible();
-    await expect(header.mobileLoginLink).toBeVisible();
-    await expect(header.mobileCartLink).toBeVisible();
+    await expect(header.mobileLoginLink).toHaveAttribute('href', '/coming-soon');
+    await expect(header.mobileCartLink).toHaveAttribute('href', '/coming-soon');
 
     await header.closeMobileMenu();
   });
 
-  test('drawer category link navigates to its page', async ({ page }) => {
+  test('drawer category link navigates to its page', async ({ header, page }) => {
     await header.openMobileMenu();
     await header.openCategoryFromMobileMenu('Агротехніка');
-    await expect(page).toHaveURL(/\/kategoriya\/agrotekhnika/);
+    await expect(page).toHaveURL(/\/kategoriya\/agrotekhnika(?:[/?#]|$)/);
   });
 
-  test('mobile search opens autocomplete on input', async ({ page }) => {
-    await header.searchInput.fill('пила');
+  test('typing into mobile search opens the autocomplete listbox', async ({ header }) => {
+    await header.typeSearch('пила');
     await expect(header.searchInput).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.getByRole('listbox')).toBeVisible();
+    await expect(header.searchListbox).toBeVisible();
   });
 });

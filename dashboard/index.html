@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8"/>
+    <title>Crawler Dashboard</title>
+
+    <style>
+        body {
+          font-family: Arial, sans-serif;
+          padding: 20px;
+          background: #f5f5f5;
+        }
+
+        h1 {
+          margin-bottom: 20px;
+        }
+
+        .stats {
+          margin-bottom: 20px;
+          display: flex;
+          gap: 20px;
+          font-size: 18px;
+        }
+
+        button {
+          margin-right: 10px;
+          padding: 8px 14px;
+          cursor: pointer;
+        }
+
+        input {
+          padding: 8px;
+          width: 400px;
+          margin-bottom: 20px;
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          background: white;
+        }
+
+        th,
+        td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          font-size: 12px;
+          text-align: left;
+        }
+
+        th {
+          background: #222;
+          color: white;
+        }
+
+        tr.ok {
+          background: #e8ffe8;
+        }
+
+        tr.fail {
+          background: #ffe5e5;
+        }
+
+        tr.skipped {
+          background: #f0f0f0;
+          color: #777;
+        }
+
+        a {
+          color: #0366d6;
+          text-decoration: none;
+        }
+
+        .badge {
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: bold;
+          display: inline-block;
+        }
+
+        .badge-ok {
+          background: #d4ffd4;
+        }
+
+        .badge-fail {
+          background: #ffd6d6;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>🚀 Crawler Dashboard</h1>
+
+<div class="stats">
+    <div id="total"></div>
+    <div id="success"></div>
+    <div id="failed"></div>
+</div>
+
+<div style="margin-bottom:20px;">
+    <button onclick="filterData('all')">ALL</button>
+    <button onclick="filterData('ok')">OK</button>
+    <button onclick="filterData('fail')">FAIL</button>
+</div>
+
+<input
+        type="text"
+        id="search"
+        placeholder="Search URL..."
+        oninput="searchUrl()"
+/>
+
+<table>
+
+    <thead>
+    <tr>
+        <th>FINAL</th>
+        <th>HTML</th>
+        <th>BROWSER</th>
+        <th>HTML PRICE</th>
+        <th>BROWSER PRICE</th>
+        <th>URL</th>
+    </tr>
+    </thead>
+
+    <tbody id="rows"></tbody>
+
+</table>
+
+<script>
+
+    let DATA = [];
+    let CURRENT = [];
+
+    fetch('/api/results')
+      .then(r => r.json())
+      .then(data => {
+
+        DATA = data.results;
+        CURRENT = DATA;
+
+        document.getElementById('total').innerHTML =
+          `TOTAL: ${DATA.length}`;
+
+        document.getElementById('success').innerHTML =
+          `✅ SUCCESS: ${data.success}`;
+
+        document.getElementById('failed').innerHTML =
+          `❌ FAILED: ${data.failed}`;
+
+        render(DATA);
+      });
+
+    function badge(value) {
+
+      if (value === null || value === undefined) {
+        return '<span class="badge">SKIPPED</span>';
+      }
+
+      return value
+        ? '<span class="badge badge-ok">OK</span>'
+        : '<span class="badge badge-fail">FAIL</span>';
+    }
+
+    function render(list) {
+
+      const rows = list.map(r => `
+
+        <tr class="${
+          r.finalOk === true ? 'ok' :
+          r.finalOk === false ? 'fail' :
+          'skipped'
+        }">
+
+          <td>${badge(r.finalOk)}</td>
+
+          <td>${badge(r.htmlOk)}</td>
+
+          <td>${badge(r.browserOk)}</td>
+
+          <td>${r.htmlPrice ?? '-'}</td>
+
+          <td>${r.browserPrice ?? '-'}</td>
+
+          <td>
+            <a href="${r.url}" target="_blank">
+              ${r.url}
+            </a>
+          </td>
+
+        </tr>
+
+      `).join('');
+
+      document.getElementById('rows').innerHTML = rows;
+    }
+
+    function filterData(type) {
+
+      if (type === 'all') {
+        CURRENT = DATA;
+      }
+
+      if (type === 'ok') {
+        CURRENT = DATA.filter(x => x.finalOk === true);
+      }
+
+      if (type === 'fail') {
+        CURRENT = DATA.filter(x => x.finalOk === false);
+      }
+
+      render(CURRENT);
+    }
+
+    function searchUrl() {
+
+      const q = document
+        .getElementById('search')
+        .value
+        .toLowerCase();
+
+      const filtered = CURRENT.filter(x =>
+        x.url.toLowerCase().includes(q)
+      );
+
+      render(filtered);
+    }
+
+</script>
+
+</body>
+</html>

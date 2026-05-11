@@ -10,10 +10,20 @@ export async function getSitemapUrls(): Promise<SitemapItem[]> {
 
   const res = await axios.get('https://bestprice.com.ua/sitemap.xml');
 
-  const parsed = await xml2js.parseStringPromise(res.data);
+  const parsed = await xml2js.parseStringPromise(res.data, {
+    explicitArray: false
+  });
 
-  return parsed.urlset.url.map((u: any) => ({
-    url: u.loc[0],
-    id: u['productId']?.[0] || null,
+  const urlset = parsed?.urlset?.url;
+
+  if (!urlset) {
+    throw new Error('Invalid sitemap structure');
+  }
+
+  const urls = Array.isArray(urlset) ? urlset : [urlset];
+
+  return urls.map((u: any) => ({
+    url: u.loc,
+    id: u['productId'] || null,
   }));
 }

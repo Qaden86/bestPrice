@@ -3,23 +3,46 @@ import fs from 'fs';
 import path from 'path';
 
 const app = express();
-const PORT = 3000;
 
-// отдаём JSON результат
-app.get('/api/results', (req, res) => {
-  const filePath = path.join(__dirname, '../crawler-result.json');
+app.use(express.static('dashboard'));
 
-  const raw = fs.readFileSync(filePath, 'utf-8');
-  const data = JSON.parse(raw);
+app.get('/api/results', (_, res) => {
 
-  res.json(data);
+  const file = path.join(
+    process.cwd(),
+    'storage',
+    'results.json'
+  );
+
+  // 🔥 FIX: файл может отсутствовать
+  if (!fs.existsSync(file)) {
+
+    return res.json({
+      results: [],
+      success: 0,
+      failed: 0
+    });
+  }
+
+  const raw = fs.readFileSync(file, 'utf-8');
+
+  const results = JSON.parse(raw || '[]');
+
+  const success = results.filter(
+    (x: any) => x.finalOk === true
+  ).length;
+
+  const failed = results.filter(
+    (x: any) => x.finalOk === false
+  ).length;
+
+  res.json({
+    results,
+    success,
+    failed
+  });
 });
 
-// простая HTML страница
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Dashboard running: http://localhost:${PORT}`);
+app.listen(3000, () => {
+  console.log('Dashboard: http://localhost:3000');
 });

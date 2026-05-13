@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as xml2js from 'xml2js';
+import { BASE_URL } from '../../config/env';
 
 export type SitemapItem = {
   url: string;
@@ -7,20 +8,31 @@ export type SitemapItem = {
 };
 
 export async function getSitemapUrls(): Promise<SitemapItem[]> {
-  const res = await axios.get('https://bestprice.com.ua/sitemap.xml');
+  const sitemapUrl = `${BASE_URL}/sitemap.xml`;
 
-  const parsed = await xml2js.parseStringPromise(res.data, {
-    explicitArray: false,
-  });
+  console.log('[SITEMAP]', sitemapUrl);
+
+  const res = await axios.get(sitemapUrl);
+
+  const parsed = await xml2js.parseStringPromise(
+    res.data,
+    {
+      explicitArray: false,
+    }
+  );
 
   const urlset = parsed?.urlset?.url;
 
-  if (!urlset) throw new Error('Invalid sitemap structure');
+  if (!urlset) {
+    throw new Error('Invalid sitemap');
+  }
 
-  const urls = Array.isArray(urlset) ? urlset : [urlset];
+  const urls = Array.isArray(urlset)
+    ? urlset
+    : [urlset];
 
   return urls.map((u: any) => ({
     url: u.loc,
-    id: u['productId'] || null,
+    id: u.productId || null,
   }));
 }

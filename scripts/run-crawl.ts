@@ -1,19 +1,33 @@
+import { runEngine } from '../crawler/engine';
+
 import { getSitemapUrls } from '../crawler/utils/sitemap';
 import { isProductPage } from '../crawler/utils/filter';
-import { runEngine } from '../crawler/engine';
 
 console.log('[ENTRY] start');
 
 async function main() {
-  const all = await getSitemapUrls();
+  const LIMIT = Number(process.env.LIMIT || 1);
 
-  const products = all.filter(isProductPage);
+  const allUrls = await getSitemapUrls();
 
-  console.log('[PRODUCT URLS]', products.length);
+  const productUrls =
+    allUrls.filter(isProductPage);
 
-  const results = await runEngine(products.slice(0, 100));
+  console.log(
+    '[PRODUCT URLS]',
+    productUrls.length
+  );
 
-  console.log('[FINAL RESULTS]', results);
+  const limited =
+    productUrls.slice(0, LIMIT);
+
+  const results =
+    await runEngine(limited);
+
+  console.log(
+    '[FINAL RESULTS]',
+    results
+  );
 }
 
 main();

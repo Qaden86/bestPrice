@@ -12,7 +12,7 @@ function normalizePrice(text: string | null): number | null {
   if (!text) return null;
 
   const cleaned = text
-    .replace(/\u00A0/g, ' ') // NBSP fix
+    .replace(/\u00A0/g, ' ')
     .replace(/[^\d]/g, '');
 
   const num = Number(cleaned);
@@ -27,8 +27,19 @@ export async function crawl(page: Page, url: string) {
 
   const trace: TraceEvent[] = [];
 
-  const add = (step: string, status: TraceEvent['status'], message?: string, data?: any) => {
-    trace.push({ step, status, message, data, ts: Date.now() });
+  const add = (
+    step: string,
+    status: TraceEvent['status'],
+    message?: string,
+    data?: any
+  ) => {
+    trace.push({
+      step,
+      status,
+      message,
+      data,
+      ts: Date.now(),
+    });
   };
 
   let loaded = false;
@@ -38,25 +49,39 @@ export async function crawl(page: Page, url: string) {
       console.log(`[GOTO ${i}]`, url);
 
       const res = await page.goto(url, {
-        waitUntil: 'domcontentloaded',
-        timeout: 45000,
+        waitUntil: 'networkidle',
+        timeout: 60000,
       });
 
-      if (!res?.ok()) throw new Error('bad response');
-
-      await page.waitForTimeout(1500);
+      if (!res?.ok()) {
+        throw new Error(`HTTP ${res?.status()}`);
+      }
 
       loaded = true;
+
       add('goto', 'OK');
+
       break;
     } catch (e: any) {
-      add('goto', 'WARN', e.message);
+      console.log('[NAV ERROR]', e.message);
+
+      add('goto', 'WARN', e.message, {
+        name: e.name,
+        stack: e.stack,
+      });
     }
   }
 
   if (!loaded) {
-    return { url, status: 'ERROR', reason: 'NAV_FAIL', trace };
+    return {
+      url,
+      status: 'ERROR',
+      reason: 'NAV_FAIL',
+      trace,
+    };
   }
+
+  // ---------------- PDP PRICE ----------------
 
   const priceLocators = [
     'span.text-2xl.font-bold',
@@ -68,13 +93,19 @@ export async function crawl(page: Page, url: string) {
 
   for (const sel of priceLocators) {
     const count = await page.locator(sel).count();
+
     if (count > 0) {
       const txt = await page.locator(sel).first().textContent();
+
       pdpPrice = normalizePrice(txt);
+
       add('pdp', 'OK', txt ?? '');
+
       break;
     }
   }
+
+  // ---------------- ADD TO CART ----------------
 
   const addBtn = page.locator('button').filter({
     hasText: /кошик|додати|купити/i,
@@ -83,41 +114,105 @@ export async function crawl(page: Page, url: string) {
   let addOk = false;
 
   try {
-    await addBtn.first().click({ timeout: 8000 });
+    await addBtn.first().click({
+      timeout: 8000,
+    });
+
     addOk = true;
+
     add('cart.click', 'OK');
   } catch (e: any) {
     add('cart.click', 'ERROR', e.message);
   }
 
-  let cartPrice: number | null = null;
+  // ---------------- WAIT CART ----------------
+
+  let cartOpened = false;
 
   if (addOk) {
+    try {
+      await Promise.race([
+        page.waitForSelector('[data-slot="sheet-title"]', {
+          timeout: 8000,
+        }),
+
+        page.waitForSelector('h2:has-text("Кошик")', {
+          timeout: 8000,
+        }),
+      ]);
+
+      cartOpened = true;
+
+      add('cart.modal', 'OK');
+    } catch (e: any) {
+      add('cart.modal', 'ERROR', e.message);
+    }
+  }
+
+  // ---------------- CART PRICE ----------------
+
+  let cartPrice: number | null = null;
+
+  if (cartOpened) {
     const cartPriceLocator = page
       .locator('span, div')
       .filter({
-        hasText: /^\s*\d[\d\s\u00A0]*₴\s*$/
+        hasText: /^\s*\d[\d\s\u00A0]*₴\s*$/,
       });
 
-    const cartCandidates = await cartPriceLocator.allTextContents();
+    const cartCandidates =
+      await cartPriceLocator.allTextContents();
 
     const cartText =
       cartCandidates
         .map(t => t.trim())
-        .find(t => /^\d[\d\s\u00A0]*₴$/.test(t)) ?? null;
+        .find(t =>
+          /^\d[\d\s\u00A0]*₴$/.test(t)
+        ) ?? null;
 
     cartPrice = normalizePrice(cartText);
 
-    add('cart', 'OK', cartText ?? '');
+    add('cart.price', 'OK', cartText ?? '');
   }
+
+  // ---------------- VALIDATION ----------------
+
+  const priceMatch =
+    pdpPrice != null &&
+    cartPrice != null &&
+    pdpPrice === cartPrice;
+
+  let reason = 'OK';
+  let status = 'OK';
+
+  if (pdpPrice == null) {
+    status = 'ERROR';
+    reason = 'INVALID_PDP_PRICE';
+  } else if (!addOk) {
+    status = 'ERROR';
+    reason = 'ADD_TO_CART_FAILED';
+  } else if (cartPrice == null) {
+    status = 'ERROR';
+    reason = 'INVALID_CART_PRICE';
+  } else if (!priceMatch) {
+    status = 'ERROR';
+    reason = 'PRICE_MISMATCH';
+  }
+
+  add('final', 'INFO', reason);
 
   return {
     url,
-    status: addOk ? 'OK' : 'ERROR',
+
+    status,
+    reason,
+
     pdpPrice,
     cartPrice,
-    priceMatch: pdpPrice === cartPrice,
+
+    priceMatch,
     addToCartSuccess: addOk,
+
     trace,
   };
 }

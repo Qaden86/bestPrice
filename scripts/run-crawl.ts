@@ -1,17 +1,19 @@
-import { getSitemapUrls } from '../tests/utils/sitemap';
-import { fullCrawl } from '../crawler/full-crawl';
+import { getSitemapUrls } from '../crawler/utils/sitemap';
+import { isProductPage } from '../crawler/utils/filter';
+import { runEngine } from '../crawler/engine';
 
-(async () => {
-  const items = await getSitemapUrls();
+console.log('[ENTRY] start');
 
-  const urls = items
-    .map(i => i.url)
-    .filter(u => u.includes('/produkt/'))
-    .slice(0, 1); // 🔥 DEBUG LIMIT
+async function main() {
+  const all = await getSitemapUrls();
 
-  console.log('TOTAL URLS:', urls.length);
+  const products = all.filter(isProductPage);
 
-  await fullCrawl(urls);
+  console.log('[PRODUCT URLS]', products.length);
 
-  console.log('CRAWL FINISHED');
-})();
+  const results = await runEngine(products.slice(0, 100));
+
+  console.log('[FINAL RESULTS]', results);
+}
+
+main();

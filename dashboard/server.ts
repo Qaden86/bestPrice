@@ -1,46 +1,19 @@
 import express from 'express';
 import fs from 'fs';
+import { RESULTS_PATH } from '../config/path';
 import path from 'path';
 
 const app = express();
 
-app.use(express.static('dashboard'));
+app.use(express.static(path.join(process.cwd(), 'dashboard')));
 
 app.get('/api/results', (_, res) => {
-
-  const file = path.join(
-    process.cwd(),
-    'storage',
-    'results.json'
-  );
-
-  // 🔥 FIX: файл может отсутствовать
-  if (!fs.existsSync(file)) {
-
-    return res.json({
-      results: [],
-      success: 0,
-      failed: 0
-    });
+  try {
+    const data = fs.readFileSync(RESULTS_PATH, 'utf-8');
+    res.json(JSON.parse(data));
+  } catch {
+    res.json([]);
   }
-
-  const raw = fs.readFileSync(file, 'utf-8');
-
-  const results = JSON.parse(raw || '[]');
-
-  const success = results.filter(
-    (x: any) => x.finalOk === true
-  ).length;
-
-  const failed = results.filter(
-    (x: any) => x.finalOk === false
-  ).length;
-
-  res.json({
-    results,
-    success,
-    failed
-  });
 });
 
 app.listen(3000, () => {

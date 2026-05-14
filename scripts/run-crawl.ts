@@ -1,33 +1,46 @@
-import { runEngine } from '../crawler/engine';
+/**
+ * ENTRYPOINT SCRIPT
+ *
+ * This is the application entrypoint.
+ *
+ * Responsibilities:
+ * - fetch sitemap
+ * - filter URLs (ingestion layer)
+ * - start crawling engine
+ *
+ * This file simulates a production "job runner".
+ */
 
-import { getSitemapUrls } from '../crawler/utils/sitemap';
-import { isProductPage } from '../crawler/utils/filter';
-
-console.log('[ENTRY] start');
+import { getSitemapUrls } from '../crawler/ingestion/sitemapFetcher';
+import { isProductPage } from '../crawler/ingestion/urlFilter';
+import { runConcurrentEngine } from '../crawler/engine/concurrentEngine';
+import { writeResults } from '../crawler/output/resultWriter';
 
 async function main() {
-  const LIMIT = Number(process.env.LIMIT || 1);
+  console.log('[ENTRY] concurrent crawler started');
 
+  const LIMIT = Number(process.env.LIMIT || 2500);
+
+  // ---------------- INGESTION ----------------
   const allUrls = await getSitemapUrls();
 
-  const productUrls =
-    allUrls.filter(isProductPage);
+  const productUrls = allUrls.filter(isProductPage).slice(0, LIMIT);
 
-  console.log(
-    '[PRODUCT URLS]',
-    productUrls.length
-  );
+  console.log('[INGESTION]', productUrls.length);
 
-  const limited =
-    productUrls.slice(0, LIMIT);
+  // ---------------- EXECUTION ----------------
+  const results = await runConcurrentEngine({
+    urls: productUrls,
+    concurrency: 3,
+  });
 
-  const results =
-    await runEngine(limited);
+  writeResults(results);
 
-  console.log(
-    '[FINAL RESULTS]',
-    results
-  );
+  console.log('[DONE]', {
+    total: results.length,
+  });
+
+  return results;
 }
 
 main();

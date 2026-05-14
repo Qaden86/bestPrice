@@ -15,27 +15,27 @@ test.describe('Header — functional', () => {
   });
 
   test('catalog menu shows categories', async ({ page }) => {
-  const header = page.getByRole('banner');
+    const header = page.getByRole('banner');
 
-  await header.getByRole('button', { name: 'Каталог' }).click();
+    await header.getByRole('button', { name: 'Каталог' }).click();
 
-  const catalogMenu = page.getByLabel('Каталог категорій'); // 💡 ключ
+    const catalogMenu = page.getByLabel('Каталог категорій'); // 💡 ключ
 
-  await expect(catalogMenu).toBeVisible();
+    await expect(catalogMenu).toBeVisible();
 
-  const category = catalogMenu.getByRole('link', { name: 'Агротехніка' });
+    const category = catalogMenu.getByRole('link', { name: 'Агротехніка' });
 
-  await expect(category).toBeVisible();
+    await expect(category).toBeVisible();
   });
 
   test('cart opens and shows empty state', async ({ page }) => {
-  const header = page.locator('header');
+    const header = page.locator('header');
 
-  await header.getByLabel('Кошик').click();
+    await header.getByLabel('Кошик').click();
 
-  const drawer = page.getByRole('dialog');
+    const drawer = page.getByRole('dialog');
 
-  await expect(drawer).toBeVisible();
-  await expect(drawer.getByText('Кошик порожній')).toBeVisible();
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText('Кошик порожній')).toBeVisible();
   });
 });

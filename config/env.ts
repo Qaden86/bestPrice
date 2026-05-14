@@ -2,6 +2,4 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-export const BASE_URL =
-  process.env.BASE_URL ||
-  'https://bestprice.com.ua';
+export const BASE_URL = process.env.BASE_URL || 'https://bestprice.com.ua';

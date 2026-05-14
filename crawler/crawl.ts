@@ -1,218 +1,196 @@
+/**
+ * CRAWL ORCHESTRATOR (EXECUTION UNIT)
+ *
+ * This module represents a single-page execution pipeline.
+ *
+ * IMPORTANT ROLE IN ARCHITECTURE:
+ * - It does NOT control concurrency
+ * - It does NOT manage queues or workers
+ * - It executes business logic for ONE URL only
+ *
+ * It is called by:
+ * - crawlWorker.ts (inside concurrent engine)
+ *
+ * RESPONSIBILITIES:
+ * - navigation
+ * - data extraction (PDP + cart)
+ * - retry handling
+ * - validation
+ * - structured logging
+ * - failure screenshots
+ */
+
 import { Page } from 'playwright';
 
+import { productExtractor } from './extractors/productExtractor';
+import { validator } from './validation/validator';
+import { retry } from './retry/retry';
+import { takeScreenshot } from './utils/screenshot';
+import { createLogger } from './utils/logger';
+
+/**
+ * Trace event structure used for debugging and observability.
+ * This allows reconstructing full execution timeline per URL.
+ */
 type TraceEvent = {
   step: string;
-  status: 'INFO' | 'OK' | 'WARN' | 'ERROR';
+  status: 'INFO' | 'OK' | 'ERROR';
   message?: string;
   data?: any;
   ts: number;
 };
 
-function normalizePrice(text: string | null): number | null {
-  if (!text) return null;
-
-  const cleaned = text
-    .replace(/\u00A0/g, ' ')
-    .replace(/[^\d]/g, '');
-
-  const num = Number(cleaned);
-
-  if (!Number.isFinite(num)) return null;
-
-  return num;
-}
-
+/**
+ * Executes full crawling pipeline for a single URL.
+ *
+ * @param page - Playwright page instance (provided by worker)
+ * @param url - Target product URL
+ */
 export async function crawl(page: Page, url: string) {
-  console.log('\n[CRAWL START]', url);
-
   const trace: TraceEvent[] = [];
 
-  const add = (
-    step: string,
-    status: TraceEvent['status'],
-    message?: string,
-    data?: any
-  ) => {
-    trace.push({
-      step,
-      status,
-      message,
-      data,
-      ts: Date.now(),
+  // Structured logger writes into trace array
+  const logger = createLogger(trace);
+
+  logger.log({
+    step: 'start',
+    status: 'INFO',
+    message: url,
+  });
+
+  // ---------------- NAVIGATION ----------------
+  // Responsible for loading the page reliably with retry policy
+  try {
+    await retry(
+      () =>
+        page.goto(url, {
+          waitUntil: 'networkidle',
+          timeout: 60000,
+        }),
+      { retries: 2, delay: 1000 },
+    );
+
+    logger.log({
+      step: 'navigation',
+      status: 'OK',
     });
-  };
+  } catch (e: any) {
+    // Capture screenshot for debugging failed navigation
+    const shot = await takeScreenshot(page, 'navigation-failed');
 
-  let loaded = false;
+    logger.log({
+      step: 'navigation',
+      status: 'ERROR',
+      message: e.message,
+      data: { screenshot: shot },
+    });
 
-  for (let i = 1; i <= 3; i++) {
-    try {
-      console.log(`[GOTO ${i}]`, url);
-
-      const res = await page.goto(url, {
-        waitUntil: 'networkidle',
-        timeout: 60000,
-      });
-
-      if (!res?.ok()) {
-        throw new Error(`HTTP ${res?.status()}`);
-      }
-
-      loaded = true;
-
-      add('goto', 'OK');
-
-      break;
-    } catch (e: any) {
-      console.log('[NAV ERROR]', e.message);
-
-      add('goto', 'WARN', e.message, {
-        name: e.name,
-        stack: e.stack,
-      });
-    }
-  }
-
-  if (!loaded) {
     return {
       url,
       status: 'ERROR',
-      reason: 'NAV_FAIL',
+      reason: 'NAVIGATION_FAILED',
       trace,
     };
   }
 
-  // ---------------- PDP PRICE ----------------
+  // ---------------- PDP EXTRACTION ----------------
+  // Extract product page price (source of truth)
+  const pdpPrice = await productExtractor.extractPdpPrice(page);
 
-  const priceLocators = [
-    'span.text-2xl.font-bold',
-    '.product-price__big',
-    'span:has-text("₴")',
-  ];
-
-  let pdpPrice: number | null = null;
-
-  for (const sel of priceLocators) {
-    const count = await page.locator(sel).count();
-
-    if (count > 0) {
-      const txt = await page.locator(sel).first().textContent();
-
-      pdpPrice = normalizePrice(txt);
-
-      add('pdp', 'OK', txt ?? '');
-
-      break;
-    }
-  }
-
-  // ---------------- ADD TO CART ----------------
-
-  const addBtn = page.locator('button').filter({
-    hasText: /кошик|додати|купити/i,
+  logger.log({
+    step: 'pdp.extract',
+    status: 'OK',
+    data: pdpPrice,
   });
 
-  let addOk = false;
+  // ---------------- ADD TO CART ----------------
+  // Validates interaction reliability (critical ecommerce flow step)
+  let addToCartSuccess = false;
 
   try {
-    await addBtn.first().click({
-      timeout: 8000,
+    addToCartSuccess = await retry(
+      () => productExtractor.clickAddToCart(page),
+      { retries: 2, delay: 800 },
+    );
+
+    logger.log({
+      step: 'cart.click',
+      status: addToCartSuccess ? 'OK' : 'ERROR',
     });
 
-    addOk = true;
+    // Capture failure state for debugging UI changes or bot blocks
+    if (!addToCartSuccess) {
+      const shot = await takeScreenshot(page, 'cart-click-failed');
 
-    add('cart.click', 'OK');
-  } catch (e: any) {
-    add('cart.click', 'ERROR', e.message);
-  }
-
-  // ---------------- WAIT CART ----------------
-
-  let cartOpened = false;
-
-  if (addOk) {
-    try {
-      await Promise.race([
-        page.waitForSelector('[data-slot="sheet-title"]', {
-          timeout: 8000,
-        }),
-
-        page.waitForSelector('h2:has-text("Кошик")', {
-          timeout: 8000,
-        }),
-      ]);
-
-      cartOpened = true;
-
-      add('cart.modal', 'OK');
-    } catch (e: any) {
-      add('cart.modal', 'ERROR', e.message);
-    }
-  }
-
-  // ---------------- CART PRICE ----------------
-
-  let cartPrice: number | null = null;
-
-  if (cartOpened) {
-    const cartPriceLocator = page
-      .locator('span, div')
-      .filter({
-        hasText: /^\s*\d[\d\s\u00A0]*₴\s*$/,
+      logger.log({
+        step: 'cart.click',
+        status: 'ERROR',
+        data: { screenshot: shot },
       });
+    }
+  } catch (e: any) {
+    const shot = await takeScreenshot(page, 'cart-click-exception');
 
-    const cartCandidates =
-      await cartPriceLocator.allTextContents();
+    logger.log({
+      step: 'cart.click',
+      status: 'ERROR',
+      message: e.message,
+      data: { screenshot: shot },
+    });
 
-    const cartText =
-      cartCandidates
-        .map(t => t.trim())
-        .find(t =>
-          /^\d[\d\s\u00A0]*₴$/.test(t)
-        ) ?? null;
-
-    cartPrice = normalizePrice(cartText);
-
-    add('cart.price', 'OK', cartText ?? '');
+    return {
+      url,
+      status: 'ERROR',
+      reason: 'ADD_TO_CART_FAILED',
+      pdpPrice,
+      trace,
+    };
   }
+
+  // If interaction failed, stop pipeline early
+  if (!addToCartSuccess) {
+    return {
+      url,
+      status: 'ERROR',
+      reason: 'ADD_TO_CART_FAILED',
+      pdpPrice,
+      trace,
+    };
+  }
+
+  // ---------------- CART EXTRACTION ----------------
+  // Extract price from cart modal / sidebar
+  const cartPrice = await productExtractor.extractCartPrice(page);
+
+  logger.log({
+    step: 'cart.extract',
+    status: 'OK',
+    data: cartPrice,
+  });
 
   // ---------------- VALIDATION ----------------
-
-  const priceMatch =
-    pdpPrice != null &&
-    cartPrice != null &&
-    pdpPrice === cartPrice;
-
-  let reason = 'OK';
-  let status = 'OK';
-
-  if (pdpPrice == null) {
-    status = 'ERROR';
-    reason = 'INVALID_PDP_PRICE';
-  } else if (!addOk) {
-    status = 'ERROR';
-    reason = 'ADD_TO_CART_FAILED';
-  } else if (cartPrice == null) {
-    status = 'ERROR';
-    reason = 'INVALID_CART_PRICE';
-  } else if (!priceMatch) {
-    status = 'ERROR';
-    reason = 'PRICE_MISMATCH';
-  }
-
-  add('final', 'INFO', reason);
-
-  return {
+  // Business rules validation layer
+  const result = validator.validate({
     url,
-
-    status,
-    reason,
-
     pdpPrice,
     cartPrice,
+    addToCartSuccess,
+  });
 
-    priceMatch,
-    addToCartSuccess: addOk,
+  logger.log({
+    step: 'validation',
+    status: result.status,
+    message: result.reason,
+  });
 
+  // ---------------- FINAL RESULT ----------------
+  // Returns normalized structured output for engine aggregation
+  return {
+    url,
+    pdpPrice,
+    cartPrice,
+    addToCartSuccess,
+    ...result,
     trace,
   };
 }

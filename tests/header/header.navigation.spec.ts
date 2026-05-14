@@ -6,11 +6,11 @@ test.describe('Header — navigation', () => {
   });
 
   test('click phone opens tel integration', async ({ page }) => {
-  const header = page.getByRole('banner');
+    const header = page.getByRole('banner');
 
-  const phone = header.getByRole('link', { name: /\(098\)/ });
+    const phone = header.getByRole('link', { name: /\(098\)/ });
 
-  await expect(phone).toHaveAttribute('href', 'tel:+380988584035');
+    await expect(phone).toHaveAttribute('href', 'tel:+380988584035');
   });
 
   test('click login redirects to /vkhid', async ({ page }) => {

@@ -1,35 +1,76 @@
-import express from 'express';
-import fs from 'fs';
-import path from 'path';
+/**
+ * DASHBOARD SERVER
+ *
+ * - Express API
+ * - Safe SPA fallback
+ * - Static UI hosting
+ */
 
-import { RESULTS_PATH } from '../config/path';
+import express from 'express';
+import path from 'path';
+import { loadResults } from './loadResults';
 
 const app = express();
+const PORT = 3000;
 
-const publicDir = path.join(
-  process.cwd(),
-  'dashboard'
-);
+/**
+ * Paths
+ */
+const UI_PATH = path.resolve(__dirname, '../dashboard-ui');
+const INDEX_HTML = path.resolve(UI_PATH, 'index.html');
 
-app.use(express.static(publicDir));
+/**
+ * Serve static UI
+ */
+app.use(express.static(UI_PATH));
 
-app.get('/api/results', (_, res) => {
-  try {
-    const raw = fs.readFileSync(
-      RESULTS_PATH,
-      'utf-8'
-    );
+/**
+ * API: results
+ */
+app.get('/api/results', (req, res) => {
+  const results = loadResults();
 
-    res.json(JSON.parse(raw));
-  } catch (e) {
-    console.error('[API ERROR]', e);
+  const enriched = results.map((r) => ({
+    status: r.match ? 'OK' : 'FAIL',
+    url: r.url,
 
-    res.json([]);
-  }
+    pdp: r.pdpPrice ?? 'N/A',
+    cart: r.cartPrice ?? 'N/A',
+
+    match: r.match ? '✅' : '❌',
+    reason: r.reason ?? 'OK',
+  }));
+
+  res.json(enriched);
 });
 
-app.listen(3000, () => {
-  console.log(
-    'Dashboard: http://localhost:3000'
-  );
+/**
+ * API: stats
+ */
+app.get('/api/stats', (req, res) => {
+  const results = loadResults();
+
+  const total = results.length;
+  const success = results.filter((r) => r.match).length;
+  const failed = total - success;
+
+  res.json({
+    total,
+    success,
+    failed,
+  });
+});
+
+/**
+ * SPA fallback
+ */
+app.use((req, res) => {
+  res.sendFile(INDEX_HTML);
+});
+
+/**
+ * Start server
+ */
+app.listen(PORT, () => {
+  console.log(`Dashboard: http://localhost:${PORT}`);
 });

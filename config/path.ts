@@ -1,7 +1,8 @@
 import path from 'path';
 
-export const RESULTS_PATH =
-  path.resolve(
-    process.cwd(),
-    'data/results.json'
-  );
+/**
+ * Centralized path registry.
+ * Used by crawler + dashboard.
+ */
+
+export const RESULTS_PATH = path.resolve(process.cwd(), 'data/results.json');

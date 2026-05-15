@@ -1,32 +1,41 @@
+import { TraceEvent } from '../types/CrawlResult';
+import { TraceBucket } from '../types/TraceBuckets';
+import { TraceStep } from '../types/TraceSteps';
+
 /**
- * STRUCTURED LOGGER
+ * Structured trace logger
  *
- * Replaces ad-hoc console.log usage.
- *
- * Provides consistent trace events for:
- * - debugging
- * - dashboard usage
- * - production observability
+ * Responsibility:
+ * - ONLY append events
+ * - NO classification logic
+ * - NO business rules
  */
-
-export type LogLevel = 'INFO' | 'OK' | 'WARN' | 'ERROR';
-
-export function createLogger(trace: any[]) {
+export function createLogger(trace: TraceEvent[]) {
   return {
     log(event: {
-      step: string;
-      status: LogLevel;
+      step: TraceStep | string;
+
+      status: 'INFO' | 'OK' | 'ERROR';
+
       message?: string;
-      data?: any;
+
+      data?: unknown;
+
+      bucket?: TraceBucket;
     }) {
-      const enriched = {
-        ...event,
+      trace.push({
+        step: event.step as TraceStep,
+
+        status: event.status,
+
+        message: event.message,
+
+        data: event.data,
+
+        bucket: event.bucket,
+
         ts: Date.now(),
-      };
-
-      trace.push(enriched);
-
-      console.log(`[${event.step}]`, event.status, event.message ?? '');
+      });
     },
   };
 }

@@ -1,35 +1,57 @@
-/**
- * CRAWL WORKER
- *
- * Responsible for processing a single URL task.
- *
- * Each worker:
- * - takes a task
- * - creates a page
- * - runs crawl pipeline
- */
-
-import { Browser } from 'playwright';
+import { chromium } from 'playwright';
 import { crawl } from '../crawl';
+import { CrawlResult } from '../types/CrawlResult';
 
-export async function crawlWorker(params: { browser: Browser; url: string }) {
-  const { browser, url } = params;
-
-  const context = await browser.newContext();
-  const page = await context.newPage();
+/**
+ * WORKER LAYER
+ *
+ * Responsibilities:
+ * - browser lifecycle management
+ * - isolation per crawl
+ * - error containment (NO silent failures)
+ */
+export async function crawlWorker(url: string): Promise<CrawlResult> {
+  const browser = await chromium.launch({
+    headless: true,
+  });
 
   try {
+    const page = await browser.newPage();
+
     const result = await crawl(page, url);
-    await context.close();
+
+    /**
+     * SAFETY GUARD:
+     * ensure crawler never returns undefined/null
+     */
+    if (!result) {
+      return {
+        url,
+        pdpPrice: null,
+        cartPrice: null,
+        match: false,
+        status: 'FAIL',
+        reason: 'CRAWL_FAILED',
+        trace: [],
+      };
+    }
 
     return result;
   } catch (e: any) {
-    await context.close();
-
+    /**
+     * HARD FAILURE PROTECTION:
+     * ensures CI always gets deterministic output
+     */
     return {
       url,
-      status: 'ERROR',
-      reason: e.message,
+      pdpPrice: null,
+      cartPrice: null,
+      match: false,
+      status: 'FAIL',
+      reason: 'CRAWL_FAILED',
+      trace: [],
     };
+  } finally {
+    await browser.close();
   }
 }

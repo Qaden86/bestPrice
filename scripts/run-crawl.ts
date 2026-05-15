@@ -19,7 +19,7 @@ import { writeResults } from '../crawler/output/resultWriter';
 async function main() {
   console.log('[ENTRY] concurrent crawler started');
 
-  const LIMIT = Number(process.env.LIMIT || 2500);
+  const LIMIT = Number(process.env.LIMIT || 10);
 
   // ---------------- INGESTION ----------------
   const allUrls = await getSitemapUrls();

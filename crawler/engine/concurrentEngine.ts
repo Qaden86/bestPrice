@@ -1,95 +1,39 @@
-import { chromium } from 'playwright';
-
-import { SmartQueue } from '../queue/smartQueue';
-import { Backpressure } from '../queue/backpressure';
 import { crawlWorker } from '../workers/crawlWorker';
+import { CrawlResult } from '../types/CrawlResult';
 
-import type { CrawlResult } from '../types/result';
+type EngineInput = {
+  urls: (string | { url: string })[];
+  concurrency: number;
+};
 
 /**
- * CONCURRENT ENGINE
- * - runs crawler in parallel
- * - normalizes output structure
+ * Concurrent Engine (SAFE VERSION)
+ *
  */
-export async function runConcurrentEngine(params: {
-  urls: any[];
-  concurrency: number;
-}): Promise<CrawlResult[]> {
-  const queue = new SmartQueue(params.urls.map((u) => u.url));
-  const backpressure = new Backpressure(params.concurrency);
-
-  const browser = await chromium.launch({ headless: true });
-
-  const results: CrawlResult[] = [];
-
-  async function workerLoop(workerId: number) {
-    while (queue.hasPending()) {
-      if (!backpressure.canProcess()) {
-        await new Promise((r) => setTimeout(r, 100));
-        continue;
-      }
-
-      const task = queue.getNext();
-      if (!task) break;
-
-      backpressure.acquire();
-      queue.markProcessing(task);
-
-      console.log(`[Worker ${workerId}]`, task.url);
-
-      try {
-        const raw = await crawlWorker({
-          browser,
-          url: task.url,
-        });
-
-        /**
-         * NORMALIZATION LAYER
-         */
-        const match = raw.pdpPrice === raw.cartPrice;
-
-        const result: CrawlResult = {
-          url: task.url,
-
-          pdpPrice: raw.pdpPrice ?? null,
-          cartPrice: raw.cartPrice ?? null,
-
-          match,
-          reason: match ? 'OK' : 'PRICE_MISMATCH',
-
-          status: match ? 'OK' : 'FAIL',
-        };
-
-        queue.markSuccess(task);
-        results.push(result);
-      } catch (e: any) {
-        queue.markFailed(task, e.message);
-
-        const failResult: CrawlResult = {
-          url: task.url,
-          pdpPrice: null,
-          cartPrice: null,
-          match: false,
-          reason: e.message,
-          status: 'FAIL',
-        };
-
-        results.push(failResult);
-
-        console.log(`[Worker ${workerId}] FAILED`, task.url, e.message);
-      } finally {
-        backpressure.release();
-      }
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: params.concurrency }, (_, i) => workerLoop(i)),
+export async function runConcurrentEngine(
+  params: EngineInput,
+): Promise<CrawlResult[]> {
+  const urls = params.urls.map((u) =>
+    typeof u === 'string' ? u : u.url,
   );
 
-  await browser.close();
+  const results: CrawlResult[] = new Array(urls.length);
 
-  console.log('[QUEUE STATS]', queue.getStats());
+  await Promise.all(
+    urls.map(async (url, index) => {
+      if (!url) {
+        console.log(`[Worker ${index}] INVALID URL`);
+        return;
+      }
 
-  return results;
+      console.log(`[Worker ${index}] ${url}`);
+
+      const result = await crawlWorker(url);
+
+      // 🔥 SAFE WRITE (NO PUSH RACE)
+      results[index] = result;
+    }),
+  );
+
+  return results.filter(Boolean);
 }

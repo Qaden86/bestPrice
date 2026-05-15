@@ -1,27 +1,17 @@
-/**
- * DASHBOARD SERVER
- *
- * - Express API
- * - Safe SPA fallback
- * - Static UI hosting
- */
-
 import express from 'express';
 import path from 'path';
+
 import { loadResults } from './loadResults';
+import { parsePrice } from '../crawler/utils/parsePrice';
+import { buildTraceInsights } from '../crawler/observability/buildTraceInsights';
 
 const app = express();
 const PORT = 3000;
 
-/**
- * Paths
- */
 const UI_PATH = path.resolve(__dirname, '../dashboard-ui');
+
 const INDEX_HTML = path.resolve(UI_PATH, 'index.html');
 
-/**
- * Serve static UI
- */
 app.use(express.static(UI_PATH));
 
 /**
@@ -30,16 +20,26 @@ app.use(express.static(UI_PATH));
 app.get('/api/results', (req, res) => {
   const results = loadResults();
 
-  const enriched = results.map((r) => ({
-    status: r.match ? 'OK' : 'FAIL',
-    url: r.url,
+  const enriched = results.map((r) => {
+    const pdp = parsePrice(r.pdpPrice);
 
-    pdp: r.pdpPrice ?? 'N/A',
-    cart: r.cartPrice ?? 'N/A',
+    const cart = parsePrice(r.cartPrice);
 
-    match: r.match ? '✅' : '❌',
-    reason: r.reason ?? 'OK',
-  }));
+    return {
+      url: typeof r.url === 'string' ? r.url : 'unknown',
+
+      status: r.status,
+      reason: r.reason,
+
+      pdp,
+      cart,
+
+      match: r.match === true,
+
+      //debug trace for modal
+      trace: r.trace ?? [],
+    };
+  });
 
   res.json(enriched);
 });
@@ -50,14 +50,16 @@ app.get('/api/results', (req, res) => {
 app.get('/api/stats', (req, res) => {
   const results = loadResults();
 
-  const total = results.length;
-  const success = results.filter((r) => r.match).length;
-  const failed = total - success;
+  const insights = buildTraceInsights(results);
 
   res.json({
-    total,
-    success,
-    failed,
+    total: insights.total,
+    successRate: insights.successRate,
+    failureRate: insights.failureRate,
+
+    bucketDistribution: insights.bucketDistribution,
+    topFailingSteps: insights.topFailingSteps,
+    cartFailureRate: insights.cartFailureRate,
   });
 });
 
@@ -68,9 +70,6 @@ app.use((req, res) => {
   res.sendFile(INDEX_HTML);
 });
 
-/**
- * Start server
- */
 app.listen(PORT, () => {
   console.log(`Dashboard: http://localhost:${PORT}`);
 });

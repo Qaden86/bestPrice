@@ -24,16 +24,16 @@ End-to-end test automation framework for [bestprice.com.ua](https://bestprice.co
 
 ## Tech Stack
 
-| Tool                | Purpose                                  |
-| ------------------- | ---------------------------------------- |
-| **Playwright**      | Browser automation & test runner         |
-| **TypeScript**      | Static typing                            |
-| **Node.js (>=18)**  | Runtime                                  |
-| **Allure Report**   | Rich HTML reporting                      |
-| **ESLint + Prettier** | Code style & static analysis           |
-| **Husky + lint-staged** | Pre-commit hooks                     |
-| **GitHub Actions**  | CI pipeline                              |
-| **dotenv**          | Environment variable management          |
+| Tool                    | Purpose                          |
+| ----------------------- | -------------------------------- |
+| **Playwright**          | Browser automation & test runner |
+| **TypeScript**          | Static typing                    |
+| **Node.js (>=18)**      | Runtime                          |
+| **Allure Report**       | Rich HTML reporting              |
+| **ESLint + Prettier**   | Code style & static analysis     |
+| **Husky + lint-staged** | Pre-commit hooks                 |
+| **GitHub Actions**      | CI pipeline                      |
+| **dotenv**              | Environment variable management  |
 
 ---
 
@@ -216,12 +216,17 @@ Tests live under `tests/` and use Playwright's test runner with custom fixtures.
 import { test, expect } from '../src/fixtures/baseFixture';
 
 test.describe('Search @smoke', () => {
-  test('user can search for a product by keyword', async ({ homePage, searchResultsPage }) => {
+  test('user can search for a product by keyword', async ({
+    homePage,
+    searchResultsPage,
+  }) => {
     await homePage.open();
     await homePage.search('iPhone 15');
 
     await expect(searchResultsPage.results).not.toHaveCount(0);
-    await expect(searchResultsPage.firstResultTitle).toContainText(/iPhone 15/i);
+    await expect(searchResultsPage.firstResultTitle).toContainText(
+      /iPhone 15/i,
+    );
   });
 });
 ```
@@ -296,7 +301,7 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    - cron: '0 2 * * *'  # nightly regression
+    - cron: '0 2 * * *' # nightly regression
 
 jobs:
   test:
@@ -337,12 +342,12 @@ jobs:
 
 ## Troubleshooting
 
-| Issue                                        | Fix                                                              |
-| -------------------------------------------- | ---------------------------------------------------------------- |
-| `browserType.launch: Executable doesn't exist` | `npx playwright install --with-deps`                            |
-| Flaky timeouts                               | Increase `DEFAULT_TIMEOUT` in `.env` or use `expect.poll`         |
-| Cannot reach bestprice.com.ua                | Check VPN / regional access; site may geo-block requests          |
-| Allure command not found                     | `npm i -D allure-commandline` or install Allure globally          |
+| Issue                                          | Fix                                                       |
+| ---------------------------------------------- | --------------------------------------------------------- |
+| `browserType.launch: Executable doesn't exist` | `npx playwright install --with-deps`                      |
+| Flaky timeouts                                 | Increase `DEFAULT_TIMEOUT` in `.env` or use `expect.poll` |
+| Cannot reach bestprice.com.ua                  | Check VPN / regional access; site may geo-block requests  |
+| Allure command not found                       | `npm i -D allure-commandline` or install Allure globally  |
 
 ---
 

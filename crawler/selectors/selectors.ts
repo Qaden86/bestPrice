@@ -1,25 +1,27 @@
 /**
  * SELECTOR STRATEGY LAYER
  *
- * This module stores all DOM selectors used across the crawler.
- *
+ * Centralized DOM selectors.
+ * Must be stable across UI changes.
  */
 
 export const SELECTORS = {
-  // PDP (product detail page) price selectors with fallback strategy
-  pdpPrice: [
-    'span.text-2xl.font-bold',
-    '.product-price__big',
-    'span:has-text("₴")',
-  ],
+  pdp: {
+    /**
+     * Primary PDP price selector(s)
+     */
+    price: ['span.text-2xl.font-bold.text-primary-text'],
 
-  // Add-to-cart button selectors with multiple UI variations
-  addToCart: [
-    'button:has-text("Додати в кошик")',
-    'button:has-text("Кошик")',
-    'button:has-text("Купити")',
-  ],
+    /**
+     * Add to cart button selector
+     */
+    addToCartButton: 'button:has-text("Додати в кошик")',
+  },
 
-  // Cart price selectors (fallback strategy for different layouts)
-  cartPrice: ['[data-slot="cart"] span', 'span.font-bold', 'div:has-text("₴")'],
+  cart: {
+    /**
+     * fallback selectors (NOT used globally anymore)
+     */
+    itemLink: 'a[href*="/produkt/"]',
+  },
 };

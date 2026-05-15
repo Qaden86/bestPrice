@@ -1,94 +1,79 @@
-/**
- * VALIDATION LAYER
- *
- * Responsible for validating extracted crawler data.
- *
- * Business rules:
- * - PDP price must exist
- * - Cart price must exist
- * - Add-to-cart must succeed
- * - PDP and cart prices must match
- */
-
-/**
- * Strict price normalization.
- * This ensures stable comparison across extraction layers.
- */
-function normalizePriceStrict(v: any): number | null {
-  if (v == null) {
-    return null;
-  }
-
-  const cleaned = String(v).replace(/[^\d]/g, '');
-
-  const num = Number(cleaned);
-
-  return Number.isFinite(num) ? num : null;
-}
+import { parsePrice } from '../utils/parsePrice';
 
 type ValidationInput = {
   url: string;
 
-  pdpPrice: any;
-  cartPrice: any;
+  pdpPrice: unknown;
+  cartPrice: unknown;
 
   addToCartSuccess: boolean;
 };
 
 export const validator = {
   validate(input: ValidationInput) {
-    const normalizedPdp = normalizePriceStrict(input.pdpPrice);
+    const pdp = parsePrice(input.pdpPrice);
+    const cart = parsePrice(input.cartPrice);
 
-    const normalizedCart = normalizePriceStrict(input.cartPrice);
-
-    /**
-     * Stable cross-layer comparison.
-     */
-    const priceMatch =
-      normalizedPdp !== null &&
-      normalizedCart !== null &&
-      normalizedPdp === normalizedCart;
-
-    // ---------------- VALIDATION RULES ----------------
-
-    if (normalizedPdp == null) {
-      return {
-        status: 'ERROR',
-        reason: 'INVALID_PDP_PRICE',
-        priceMatch: false,
-      };
-    }
+    // ---------------- CART ----------------
 
     if (!input.addToCartSuccess) {
       return {
-        status: 'ERROR',
+        status: 'FAIL',
         reason: 'ADD_TO_CART_FAILED',
-        priceMatch: false,
-      };
+        match: false,
+      } as const;
     }
 
-    if (normalizedCart == null) {
+    // ---------------- PDP ----------------
+
+    if (pdp.status === 'MISSING') {
       return {
-        status: 'ERROR',
-        reason: 'INVALID_CART_PRICE',
-        priceMatch: false,
-      };
+        status: 'FAIL',
+        reason: 'PDP_PRICE_MISSING',
+        match: false,
+      } as const;
     }
 
-    if (!priceMatch) {
+    if (pdp.status === 'FAILED_PARSE') {
       return {
-        status: 'ERROR',
+        status: 'FAIL',
+        reason: 'PDP_PRICE_PARSE_FAILED',
+        match: false,
+      } as const;
+    }
+
+    // ---------------- CART PRICE ----------------
+
+    if (cart.status === 'MISSING') {
+      return {
+        status: 'FAIL',
+        reason: 'CART_PRICE_MISSING',
+        match: false,
+      } as const;
+    }
+
+    if (cart.status === 'FAILED_PARSE') {
+      return {
+        status: 'FAIL',
+        reason: 'CART_PRICE_PARSE_FAILED',
+        match: false,
+      } as const;
+    }
+
+    // ---------------- MATCH ----------------
+
+    if (pdp.value !== cart.value) {
+      return {
+        status: 'FAIL',
         reason: 'PRICE_MISMATCH',
-        priceMatch: false,
-      };
+        match: false,
+      } as const;
     }
-
-    // ---------------- SUCCESS ----------------
 
     return {
       status: 'OK',
       reason: 'OK',
-      priceMatch: true,
-    };
+      match: true,
+    } as const;
   },
 };

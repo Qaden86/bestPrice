@@ -1,0 +1,9 @@
+export type TraceBucket =
+  | 'INFRA_FAILURE'
+  | 'NAVIGATION_FAILURE'
+  | 'DOM_DRIFT'
+  | 'EXTRACTION_FAILURE'
+  | 'PARSE_ERROR'
+  | 'BUSINESS_LOGIC_FAIL'
+  | 'VALIDATION_FAIL'
+  | 'UNKNOWN';

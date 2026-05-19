@@ -1,46 +1,34 @@
 import { BrowserContext } from 'playwright';
 
 import { BrowserPool } from '../browser/browserPool';
-import { crawl } from '../crawl';
+import { crawl, shutdownCrawlResult } from '../crawl';
 import { CrawlResult } from '../types/CrawlResult';
+import { isShuttingDown, isShutdownError } from '../engine/shutdown';
 
-/**
- * Normalize URL input into strict string format.
- */
 function normalizeUrl(input: string | { url: string }): string {
-  if (typeof input === 'string') {
-    return input;
-  }
-
-  if (input && typeof input.url === 'string') {
-    return input.url;
-  }
-
+  if (typeof input === 'string') return input;
+  if (input?.url) return input.url;
   return 'unknown';
 }
 
-/**
- * Single crawl execution unit
- *
- * IMPORTANT:
- * - browsers are reused
- * - contexts are NOT reused
- * - each job gets isolated clean session
- *
- * `newContext` lives inside the try block so a throw there still releases
- * the browser back to the pool — otherwise the pool drains and deadlocks
- * at `concurrency=N` after N failures.
- */
 export async function crawlWorker(
   inputUrl: string | { url: string },
   pool: BrowserPool,
 ): Promise<CrawlResult> {
   const url = normalizeUrl(inputUrl);
 
+  if (isShuttingDown()) {
+    return shutdownCrawlResult(url);
+  }
+
   const browser = await pool.acquire();
   let context: BrowserContext | null = null;
 
   try {
+    if (isShuttingDown()) {
+      return shutdownCrawlResult(url);
+    }
+
     context = await browser.newContext({
       locale: 'uk-UA',
       viewport: { width: 1280, height: 900 },
@@ -49,21 +37,14 @@ export async function crawlWorker(
     });
 
     const page = await context.newPage();
-    const result = await crawl(page, url);
+    return await crawl(page, url);
+  } catch (e: unknown) {
+    if (isShutdownError(e) || isShuttingDown()) {
+      return shutdownCrawlResult(url);
+    }
 
-    return (
-      result ?? {
-        url,
-        pdpPrice: null,
-        cartPrice: null,
-        match: false,
-        status: 'FAIL',
-        reason: 'CRAWL_FAILED',
-        trace: [],
-      }
-    );
-  } catch (e: any) {
-    console.error('[WORKER ERROR]', url, e);
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[WORKER ERROR]', url, message);
 
     return {
       url,
@@ -71,21 +52,19 @@ export async function crawlWorker(
       cartPrice: null,
       match: false,
       status: 'FAIL',
-      reason: e?.message || 'CRAWL_FAILED',
+      reason: 'CRAWL_FAILED',
       trace: [
         {
           step: 'worker',
           status: 'ERROR',
-          message: e?.message || 'UNKNOWN_ERROR',
+          message,
           ts: Date.now(),
         },
       ],
     };
   } finally {
     if (context) {
-      await context.close().catch(() => {
-        /* best-effort */
-      });
+      await context.close().catch(() => {});
     }
     pool.release(browser);
   }

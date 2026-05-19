@@ -28,10 +28,7 @@ export interface ExecutionConfig {
    */
   concurrency: number;
 
-  /**
-   * Capture PNG screenshots on navigation / cart failures.
-   * Disable for full crawls — fullPage shots are slow and can timeout under load.
-   */
+  /** Failure screenshots (CRAWL_SCREENSHOTS=false to disable) */
   screenshots: boolean;
 }
 
@@ -92,24 +89,15 @@ function parseConcurrency(env: Environment): number {
   return 3; // stage
 }
 
-/**
- * Screenshots on failure (full-page PNG). Off by default for full crawls.
- *
- * CRAWL_SCREENSHOTS=false | true
- */
-function parseScreenshots(mode: ExecutionMode): boolean {
+/** CRAWL_SCREENSHOTS=false to disable failure screenshots */
+function parseScreenshots(): boolean {
   const raw = process.env.CRAWL_SCREENSHOTS?.toLowerCase();
 
   if (raw === 'false' || raw === '0' || raw === 'no') {
     return false;
   }
 
-  if (raw === 'true' || raw === '1' || raw === 'yes') {
-    return true;
-  }
-
-  // Full runs: skip screenshots unless explicitly enabled
-  return mode === 'sample';
+  return true;
 }
 
 /**
@@ -124,6 +112,6 @@ export function getExecutionConfig(): ExecutionConfig {
     mode,
     sampleSize: parseSampleSize(mode),
     concurrency: parseConcurrency(env),
-    screenshots: parseScreenshots(mode),
+    screenshots: parseScreenshots(),
   };
 }

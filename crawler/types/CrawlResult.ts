@@ -1,21 +1,16 @@
-/**
- * Canonical crawler result and trace types.
- */
-
 export type CrawlStatus = 'OK' | 'FAIL';
 
 export type CrawlReason =
   | 'OK'
   | 'NAVIGATION_FAILED'
-  | 'PDP_NOT_FOUND'
-  | 'PDP_PRICE_MISSING'
-  | 'PDP_PRICE_PARSE_FAILED'
   | 'CART_NOT_READY'
-  | 'CART_PRICE_MISSING'
-  | 'CART_PRICE_PARSE_FAILED'
-  | 'ADD_TO_CART_FAILED'
+  | 'SELECTOR_NOT_FOUND'
+  | 'MISSING_PRICE'
+  | 'PRICE_IS_ZERO'
   | 'PRICE_MISMATCH'
+  | 'ADD_TO_CART_FAILED'
   | 'CRAWL_FAILED'
+  | 'SHUTDOWN'
   | 'INTERNAL_ERROR';
 
 export type TraceStep =
@@ -58,5 +53,10 @@ export type CrawlResult = {
   match: boolean;
   status: CrawlStatus;
   reason: CrawlReason;
+  /** Selector from SELECTORS when reason is SELECTOR_NOT_FOUND */
+  selector?: string;
+  /** Extra context: pdp | cart | add_to_cart */
+  detail?: string;
+  screenshot?: string | null;
   trace: TraceEvent[];
 };

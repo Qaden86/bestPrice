@@ -60,12 +60,74 @@ function renderReasonFilter() {
   select.value = currentValue;
 }
 
-/**
- * Snapshot load (initial page load)
- */
+let ARCHIVED_RUNS = [];
+let ACTIVE_RUN = 'current';
+
+async function loadRunsList() {
+  try {
+    const res = await fetch('/api/runs');
+    ARCHIVED_RUNS = await res.json();
+
+    const runSelect = document.getElementById('runSelect');
+    const compareSelect = document.getElementById('compareRunSelect');
+
+    if (!runSelect || !compareSelect) return;
+
+    runSelect.innerHTML =
+      '<option value="current">Current run</option>' +
+      ARCHIVED_RUNS.map(
+        (r) =>
+          `<option value="${r.runId}">${r.finishedAt.slice(0, 19)} — OK ${r.ok}/${r.total}</option>`,
+      ).join('');
+
+    compareSelect.innerHTML =
+      '<option value="">Compare with…</option>' +
+      ARCHIVED_RUNS.map(
+        (r) => `<option value="${r.runId}">${r.finishedAt.slice(0, 19)}</option>`,
+      ).join('');
+  } catch (e) {
+    console.warn('[RUNS LIST]', e);
+  }
+}
+
+async function loadCompareBanner() {
+  const compareId = document.getElementById('compareRunSelect')?.value;
+  const banner = document.getElementById('compareBanner');
+
+  if (!compareId || !banner) {
+    if (banner) banner.style.display = 'none';
+    return;
+  }
+
+  const baseline = ACTIVE_RUN === 'current' ? 'current' : ACTIVE_RUN;
+
+  const res = await fetch(
+    `/api/runs/compare?a=${encodeURIComponent(compareId)}&b=${encodeURIComponent(baseline)}`,
+  );
+  const data = await res.json();
+
+  const sel = data.reasonTrends?.selectorNotFound;
+  const mis = data.reasonTrends?.priceMismatch;
+  const stab = (data.diff?.stabilityDelta ?? 0) * 100;
+
+  banner.style.display = 'block';
+  banner.innerHTML = `
+    <strong>Compare</strong> ${compareId} → ${baseline} |
+    improved ${data.diff.improved}, regressed ${data.diff.regressed} |
+    success rate Δ ${stab >= 0 ? '+' : ''}${stab.toFixed(1)}% |
+    SELECTOR_NOT_FOUND Δ ${sel?.delta ?? 0} |
+    PRICE_MISMATCH Δ ${mis?.delta ?? 0}
+  `;
+}
+
 async function loadSnapshot() {
   try {
-    const res = await fetch('/api/results');
+    const endpoint =
+      ACTIVE_RUN === 'current'
+        ? '/api/results'
+        : `/api/runs/${encodeURIComponent(ACTIVE_RUN)}/results`;
+
+    const res = await fetch(endpoint);
     ALL_ROWS = await res.json();
 
     window.__ROWS_MAP = {};
@@ -302,14 +364,14 @@ function renderTable(rows) {
           <div style="display:flex; gap:8px; align-items:center;">
             <button onclick="window.open('${url}', '_blank')">OPEN</button>
             <button onclick="navigator.clipboard.writeText('${url}')">COPY</button>
-            <button onclick="openTraceByUrl('${url}')">TRACE</button>
+            ${r.screenshot ? `<a href="${screenshotHref(r.screenshot)}" target="_blank">PNG</a>` : ''}
           </div>
         </td>
 
         <td>${pdp}</td>
         <td>${cart}</td>
         <td>${diff}</td>
-        <td>${r.reason || '-'}</td>
+        <td>${formatReason(r)}</td>
       </tr>
     `;
     })
@@ -331,8 +393,34 @@ document
   .getElementById('reasonFilter')
   ?.addEventListener('change', applyFilters);
 
-/**
- * INIT
- */
+function screenshotHref(absPath) {
+  const normalized = String(absPath).replace(/\\/g, '/');
+  const idx = normalized.indexOf('/data/');
+  return idx >= 0 ? normalized.slice(idx) : normalized;
+}
+
+function formatReason(r) {
+  if (r.reason === 'SELECTOR_NOT_FOUND' && r.selector) {
+    return `SELECTOR_NOT_FOUND (${r.selector})`;
+  }
+  if (r.reason === 'MISSING_PRICE' && r.detail) {
+    return `MISSING_PRICE (${r.detail})`;
+  }
+  return r.reason || '-';
+}
+
+document.getElementById('runSelect')?.addEventListener('change', async (e) => {
+  ACTIVE_RUN = e.target.value;
+  await loadSnapshot();
+  await loadCompareBanner();
+});
+
+document.getElementById('compareRunSelect')?.addEventListener('change', () => {
+  loadCompareBanner();
+});
+
+loadRunsList();
 loadSnapshot();
-initStream();
+if (ACTIVE_RUN === 'current') {
+  initStream();
+}

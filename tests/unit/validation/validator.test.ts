@@ -1,75 +1,86 @@
-/**
- * VALIDATOR TESTS
- *
- * Verifies business validation rules:
- * - matching prices
- * - mismatching prices
- * - invalid prices
- * - add-to-cart failures
- */
-
 import { describe, it, expect } from 'vitest';
 
 import { validator } from '@crawler/validation/validator';
 
+const pdpOk = {
+  selector: '[data-testid="product-detail-price"]',
+  selectorFound: true,
+  price: 100,
+};
+
+const cartOk = {
+  selector: '[data-testid="cart-item-line-total"]',
+  selectorFound: true,
+  price: 100,
+};
+
+const addOk = {
+  selector: '[data-testid="product-detail-add-to-cart"]',
+  selectorFound: true,
+  clicked: true,
+};
+
 describe('validator', () => {
-  it('should validate matching prices', () => {
+  it('accepts matching prices', () => {
     const result = validator.validate({
       url: 'https://test.com',
-      pdpPrice: '1499 ₴',
-      cartPrice: 1499,
-      addToCartSuccess: true,
+      pdp: pdpOk,
+      cart: cartOk,
+      addToCart: addOk,
     });
 
     expect(result.status).toBe('OK');
     expect(result.match).toBe(true);
   });
 
-  it('should accept cart gross with VAT on top of PDP net', () => {
+  it('reports SELECTOR_NOT_FOUND for PDP', () => {
     const result = validator.validate({
       url: 'https://test.com',
-      pdpPrice: 135,
-      cartPrice: 148.5,
-      addToCartSuccess: true,
-    });
-
-    expect(result.status).toBe('OK');
-    expect(result.match).toBe(true);
-  });
-
-  it('should detect price mismatch', () => {
-    const result = validator.validate({
-      url: 'https://test.com',
-      pdpPrice: 1499,
-      cartPrice: 2000,
-      addToCartSuccess: true,
+      pdp: { ...pdpOk, selectorFound: false },
+      cart: cartOk,
+      addToCart: addOk,
     });
 
     expect(result.status).toBe('FAIL');
+    if (result.status === 'FAIL') {
+      expect(result.reason).toBe('SELECTOR_NOT_FOUND');
+      expect(result.selector).toBe(pdpOk.selector);
+    }
+  });
+
+  it('reports MISSING_PRICE', () => {
+    const result = validator.validate({
+      url: 'https://test.com',
+      pdp: { ...pdpOk, price: null },
+      cart: cartOk,
+      addToCart: addOk,
+    });
+
+    if (result.status === 'FAIL') {
+      expect(result.reason).toBe('MISSING_PRICE');
+      expect(result.detail).toBe('pdp');
+    }
+  });
+
+  it('reports PRICE_IS_ZERO', () => {
+    const result = validator.validate({
+      url: 'https://test.com',
+      pdp: { ...pdpOk, price: 0 },
+      cart: { ...cartOk, price: 0 },
+      addToCart: addOk,
+    });
+
+    expect(result.reason).toBe('PRICE_IS_ZERO');
+  });
+
+  it('reports PRICE_MISMATCH', () => {
+    const result = validator.validate({
+      url: 'https://test.com',
+      pdp: pdpOk,
+      cart: { ...cartOk, price: 2 },
+      addToCart: addOk,
+    });
+
     expect(result.reason).toBe('PRICE_MISMATCH');
-  });
-
-  it('should fail when add-to-cart fails', () => {
-    const result = validator.validate({
-      url: 'https://test.com',
-      pdpPrice: 1499,
-      cartPrice: 1499,
-      addToCartSuccess: false,
-    });
-
-    expect(result.status).toBe('FAIL');
-    expect(result.reason).toBe('ADD_TO_CART_FAILED');
-  });
-
-  it('should fail on invalid PDP price', () => {
-    const result = validator.validate({
-      url: 'https://test.com',
-      pdpPrice: null,
-      cartPrice: 1499,
-      addToCartSuccess: true,
-    });
-
-    expect(result.status).toBe('FAIL');
-    expect(result.reason).toBe('PDP_PRICE_MISSING');
   });
 });

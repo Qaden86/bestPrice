@@ -1,17 +1,13 @@
 import { BrowserPool } from '../browser/browserPool';
 import { crawlWorker } from '../workers/crawlWorker';
-import { upsertResult } from '../output/resultStore';
+import { upsertResult, flushResults } from '../output/resultStore';
+import { isShuttingDown, requestShutdown } from './shutdown';
 
-/**
- * Worker-pool engine: N workers share a browser pool of the same size.
- */
 export async function runConcurrentEngine(params: {
   urls: (string | { url: string })[];
   concurrency: number;
-}) {
-  const urls = params.urls.map(u =>
-    typeof u === 'string' ? u : u.url,
-  );
+}): Promise<void> {
+  const urls = params.urls.map((u) => (typeof u === 'string' ? u : u.url));
 
   const pool = new BrowserPool(params.concurrency);
   await pool.init();
@@ -19,21 +15,17 @@ export async function runConcurrentEngine(params: {
   let cursor = 0;
   let completed = 0;
 
-  const getNext = () => {
-    if (cursor >= urls.length) return null;
+  const getNext = (): string | null => {
+    if (isShuttingDown() || cursor >= urls.length) return null;
     return urls[cursor++];
   };
 
   const worker = async () => {
-    while (true) {
+    while (!isShuttingDown()) {
       const url = getNext();
       if (!url) return;
 
       const result = await crawlWorker(url, pool);
-
-      /**
-       * SINGLE SOURCE OF TRUTH WRITE
-       */
       upsertResult(result);
 
       completed++;
@@ -41,12 +33,27 @@ export async function runConcurrentEngine(params: {
     }
   };
 
-  const workers = Array.from(
-    { length: params.concurrency },
-    () => worker(),
+  const workers = Array.from({ length: params.concurrency }, () =>
+    worker().catch((err) => {
+      if (!isShuttingDown()) {
+        console.error('[WORKER LOOP ERROR]', err);
+      }
+    }),
   );
 
   await Promise.all(workers);
 
+  await flushResults();
   await pool.close();
+}
+
+export function installShutdownHandlers(): void {
+  const onSignal = () => {
+    if (isShuttingDown()) return;
+    console.log('\n[SHUTDOWN] stopping workers…');
+    requestShutdown();
+  };
+
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
 }

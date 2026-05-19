@@ -2,43 +2,49 @@ import { EventEmitter } from 'events';
 import fsp from 'fs/promises';
 
 import { RESULTS_PATH } from '../../config/path';
-
-/**
- * NDJSON append + realtime bus.
- *
- * The dashboard reads the NDJSON file for snapshots and listens to `resultBus`
- * for live updates — no in-process accumulator is needed.
- */
+import type { CrawlResult } from '../types/CrawlResult';
 
 export const resultBus = new EventEmitter();
 
-/**
- * Serialize NDJSON appends. Fire-and-forget `fs.appendFile` lets libuv queue
- * many concurrent writes during a high-throughput crawl, retaining callbacks
- * and buffers. Chaining keeps at most one write pending.
- */
-let writeChain: Promise<void> = Promise.resolve();
+const writeQueue: string[] = [];
+let drainActive = false;
 
-function appendNdjson(line: string): Promise<void> {
-  writeChain = writeChain
-    .catch(() => {})
-    .then(() => fsp.appendFile(RESULTS_PATH, line, 'utf-8'));
-  return writeChain;
+function compactForPersist(result: CrawlResult): Omit<CrawlResult, 'trace'> & { trace?: never } {
+  const { trace: _trace, ...rest } = result;
+  return rest;
 }
 
-export function upsertResult(result: any): void {
-  const key = typeof result.url === 'string' ? result.url : result.url?.url;
+async function drainQueue(): Promise<void> {
+  if (drainActive) return;
+  drainActive = true;
 
+  try {
+    while (writeQueue.length > 0) {
+      const batch = writeQueue.splice(0, 100).join('');
+      await fsp.appendFile(RESULTS_PATH, batch, 'utf-8');
+    }
+  } finally {
+    drainActive = false;
+    if (writeQueue.length > 0) {
+      void drainQueue();
+    }
+  }
+}
+
+export function upsertResult(result: CrawlResult): void {
+  const key = typeof result.url === 'string' ? result.url : (result.url as { url: string })?.url;
   if (!key) return;
 
-  resultBus.emit('update', result);
-
-  void appendNdjson(JSON.stringify(result) + '\n');
+  const persisted = compactForPersist(result);
+  resultBus.emit('update', persisted);
+  writeQueue.push(JSON.stringify(persisted) + '\n');
+  void drainQueue();
 }
 
-/**
- * Drain pending appends — call before process exit so the last writes land.
- */
 export function flushResults(): Promise<void> {
-  return writeChain.catch(() => {});
+  return drainQueue();
+}
+
+export function pendingWriteCount(): number {
+  return writeQueue.length;
 }

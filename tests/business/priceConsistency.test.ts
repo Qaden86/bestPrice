@@ -1,4 +1,4 @@
-import { expect } from 'vitest';
+import { test, expect } from 'vitest';
 import { chromium } from 'playwright';
 import { crawl } from '../../crawler/crawl';
 

@@ -21,7 +21,7 @@ describe('crawl integration @integration', () => {
 
       expect(result).toMatchObject({
         status: 'OK',
-        priceMatch: true,
+        match: true,
         pdpPrice: expect.any(Number),
         cartPrice: expect.any(Number),
       });

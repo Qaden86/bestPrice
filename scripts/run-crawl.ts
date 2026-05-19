@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   console.log('[CONFIG]', { ...runtime, baseUrl: app.baseUrl });
 
   const allUrls = await getSitemapUrls(app);
-  const productUrls = allUrls.filter(isProductPage);
+  const productUrls = allUrls.filter(isProductPage).map((item) => item.url);
   const urlsToProcess = selectUrls(productUrls, runtime);
 
   console.log('[INGESTION]', {

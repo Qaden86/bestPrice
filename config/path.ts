@@ -15,3 +15,8 @@ export const SCREENSHOTS_DIR = path.resolve(
   DATA_DIR,
   'screenshots',
 );
+
+export const SITEMAP_FAILURES_PATH = path.resolve(
+  DATA_DIR,
+  'sitemap-failures.json',
+);

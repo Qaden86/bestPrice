@@ -1,4 +1,4 @@
-import { ExecutionConfig } from '../config/executionConfig';
+import { ExecutionConfig } from '../../config/executionConfig';
 
 /**
  * URL selection strategy layer

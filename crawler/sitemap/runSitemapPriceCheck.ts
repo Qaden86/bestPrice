@@ -9,9 +9,10 @@ import {
   SITEMAP_REQUEST_TIMEOUT_MS,
 } from '../../config/env';
 import { SITEMAP_FAILURES_PATH } from '../../config/path';
+import { getAppConfig } from '../../config/appConfig';
 import { ensureDataDir } from '../output/ensureDataDir';
 import { checkProductPrice, createSitemapHttpClient } from './productPriceCheck';
-import type { ProductPriceCheckResult, SitemapPriceCheckSummary } from './types';
+import type { SitemapPriceCheckSummary } from './types';
 
 export type RunSitemapPriceCheckOptions = {
   /** Override env SITEMAP_LIMIT; undefined = use env default (50). Pass null for no limit. */
@@ -30,7 +31,7 @@ export async function runSitemapPriceCheck(
   const writeFailures = options.writeFailures ?? true;
 
   const client = createSitemapHttpClient(BASE_URL);
-  const allItems = await getSitemapUrls();
+  const allItems = await getSitemapUrls(getAppConfig());
   const productItems = allItems.filter(isProductPage);
   const urls =
     limit === undefined ? productItems.map((i) => i.url) : productItems.slice(0, limit).map((i) => i.url);
@@ -54,7 +55,7 @@ export async function runSitemapPriceCheck(
     ensureDataDir();
     failuresPath = SITEMAP_FAILURES_PATH;
     fs.writeFileSync(
-      failuresPath,
+      SITEMAP_FAILURES_PATH,
       JSON.stringify(
         {
           generatedAt: new Date().toISOString(),

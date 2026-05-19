@@ -1,26 +1,60 @@
 import { Page } from 'playwright';
+import { SELECTORS } from '../selectors/selectors';
+import { parsePriceNumber } from './parsePrice';
 
-export async function waitForCartReady(page: Page) {
-  const priceSelector = '[data-testid="cart-item-line-total"]';
+const LINE_TOTAL = SELECTORS.cart.price[0];
 
-  // 1. wait for element
-  await page.waitForSelector(priceSelector, { timeout: 15000 });
+export async function waitForCartReady(page: Page): Promise<string> {
+  await ensureCartPanelVisible(page);
 
-  // 2. wait for stable numeric value (no waitForFunction DOM polling loop)
+  await page.waitForSelector(LINE_TOTAL, { timeout: 20_000 });
+
   let lastValue = '';
+  let stableReads = 0;
 
-  for (let i = 0; i < 20; i++) {
-    const value = await page.$eval(priceSelector, el =>
-      (el.textContent || '').trim()
-    ).catch(() => '');
+  for (let i = 0; i < 24; i++) {
+    const value = await page
+      .locator(SELECTORS.cart.item)
+      .first()
+      .locator(LINE_TOTAL)
+      .textContent()
+      .catch(() => '');
 
-    if (value && /\d/.test(value) && value === lastValue) {
-      return value;
+    const trimmed = (value || '').trim();
+    const parsed = parsePriceNumber(trimmed);
+
+    if (parsed !== null && trimmed && trimmed === lastValue) {
+      stableReads++;
+      if (stableReads >= 2) {
+        return trimmed;
+      }
+    } else {
+      stableReads = 0;
     }
 
-    lastValue = value;
-    await page.waitForTimeout(250);
+    lastValue = trimmed;
+    await page.waitForTimeout(200);
   }
 
-  throw new Error('Cart not stable');
+  throw new Error('Cart price not stable');
+}
+
+async function ensureCartPanelVisible(page: Page): Promise<void> {
+  const inCart = await page
+    .locator(SELECTORS.cart.item)
+    .first()
+    .locator(LINE_TOTAL)
+    .isVisible()
+    .catch(() => false);
+
+  if (inCart) {
+    return;
+  }
+
+  const cartLink = page.locator(SELECTORS.cart.openDrawer).first();
+
+  if (await cartLink.isVisible().catch(() => false)) {
+    await cartLink.click({ timeout: 8_000 }).catch(() => {});
+    await page.waitForTimeout(400);
+  }
 }

@@ -11,3 +11,6 @@ playwright/.cache/
 data/screenshots/
 data/results.ndjson
 data/results.json
+data/*.log
+.playwright-mcp/
+storage/

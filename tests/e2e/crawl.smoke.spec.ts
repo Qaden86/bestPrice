@@ -38,6 +38,8 @@ function assertStrictSuccess(result: CrawlResult): void {
 }
 
 test('crawl e2e smoke', async () => {
+  test.setTimeout(120_000);
+
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -60,4 +62,4 @@ test('crawl e2e smoke', async () => {
       contentType: 'application/json',
     });
   }
-}, 120000);
+});

@@ -1,33 +1,51 @@
-/**
- * SCREENSHOT UTILITY
- *
- * Captures browser state when something fails.
- *
- * This is critical for:
- * - debugging flaky selectors
- * - understanding UI state at failure time
- * - incident investigation
- */
-
 import { Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
 import { SCREENSHOTS_DIR } from '../../config/path';
 
-export async function takeScreenshot(page: Page, name: string) {
-  const dir = SCREENSHOTS_DIR;
+const SCREENSHOT_TIMEOUT_MS = Number(process.env.CRAWL_SCREENSHOT_TIMEOUT_MS ?? 8_000);
 
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+let screenshotsEnabled = true;
+
+export function setScreenshotsEnabled(enabled: boolean): void {
+  screenshotsEnabled = enabled;
+}
+
+export function areScreenshotsEnabled(): boolean {
+  return screenshotsEnabled;
+}
+
+export async function takeScreenshot(
+  page: Page,
+  name: string,
+): Promise<string | null> {
+  if (!screenshotsEnabled) {
+    return null;
   }
 
-  const filePath = path.join(dir, `${name}-${Date.now()}.png`);
+  try {
+    const dir = SCREENSHOTS_DIR;
 
-  await page.screenshot({
-    path: filePath,
-    fullPage: true,
-  });
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
 
-  return filePath;
+    const filePath = path.join(dir, `${name}-${Date.now()}.png`);
+
+    await page.screenshot({
+      path: filePath,
+      fullPage: false,
+      timeout: SCREENSHOT_TIMEOUT_MS,
+    });
+
+    return filePath;
+  } catch (e) {
+    console.warn(
+      '[screenshot] skipped',
+      name,
+      (e as Error).message?.slice(0, 120) ?? e,
+    );
+    return null;
+  }
 }

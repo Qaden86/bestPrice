@@ -3,8 +3,7 @@ import { crawlWorker } from '../workers/crawlWorker';
 import { upsertResult } from '../output/resultStore';
 
 /**
- * Queue-based concurrent engine
- * - true parallelism = browser instances
+ * Worker-pool engine: N workers share a browser pool of the same size.
  */
 export async function runConcurrentEngine(params: {
   urls: (string | { url: string })[];

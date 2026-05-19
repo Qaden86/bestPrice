@@ -1,20 +1,7 @@
 import { Page } from 'playwright';
 
 import { SELECTORS } from '../selectors/selectors';
-
-function normalizePrice(text: string | null): number | null {
-  if (!text) return null;
-
-  const cleaned = text
-    .replace(/\u00A0/g, ' ')
-    .replace(/[^\d.,-]/g, '');
-
-  const normalized = cleaned.replace(',', '.');
-
-  const num = Number(normalized);
-
-  return Number.isFinite(num) ? num : null;
-}
+import { parsePriceNumber } from '../utils/parsePrice';
 
 export const productExtractor = {
   async extractPdpPrice(page: Page): Promise<number | null> {
@@ -25,7 +12,7 @@ export const productExtractor = {
         if (!(await el.count())) continue;
 
         const text = await el.textContent();
-        const price = normalizePrice(text);
+        const price = parsePriceNumber(text);
 
         if (price !== null) {
           return price;
@@ -68,7 +55,7 @@ export const productExtractor = {
 
       const text = await el.textContent();
 
-      return normalizePrice(text);
+      return parsePriceNumber(text);
     } catch {
       return null;
     }

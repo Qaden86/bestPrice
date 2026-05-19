@@ -59,9 +59,9 @@ test.describe('Header — desktop', () => {
     await expect(header.root).toBeInViewport();
   });
 
-  test('favorites link routes to /coming-soon', async ({ header, page }) => {
+  test('favorites link routes to /bazhannya', async ({ header, page }) => {
     await header.openFavorites();
-    await expect(page).toHaveURL(/\/coming-soon(?:[/?#]|$)/);
+    await expect(page).toHaveURL(/\/bazhannya(?:[/?#]|$)/);
   });
 
   test('cart trigger opens the cart dialog', async ({ header, page }) => {

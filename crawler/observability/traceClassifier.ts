@@ -1,5 +1,4 @@
-import { CrawlReason } from '../types/CrawlResult';
-import { TraceBucket } from '../types/TraceBuckets';
+import { CrawlReason, TraceBucket } from '../types/CrawlResult';
 
 export function classifyTrace(reason: CrawlReason): TraceBucket {
   switch (reason) {
@@ -8,6 +7,7 @@ export function classifyTrace(reason: CrawlReason): TraceBucket {
       return 'NAVIGATION_FAILURE';
 
     // extraction layer
+    case 'PDP_NOT_FOUND':
     case 'PDP_PRICE_MISSING':
     case 'CART_PRICE_MISSING':
       return 'EXTRACTION_FAILURE';
@@ -26,6 +26,7 @@ export function classifyTrace(reason: CrawlReason): TraceBucket {
 
     // cart / flow
     case 'ADD_TO_CART_FAILED':
+    case 'CART_NOT_READY':
       return 'BUSINESS_LOGIC_FAIL';
 
     // fallback

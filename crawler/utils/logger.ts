@@ -1,6 +1,4 @@
-import { TraceEvent } from '../types/CrawlResult';
-import { TraceBucket } from '../types/TraceBuckets';
-import { TraceStep } from '../types/TraceSteps';
+import { TraceBucket, TraceEvent, TraceStep } from '../types/CrawlResult';
 
 /**
  * Structured trace logger

@@ -1,13 +1,11 @@
 import { EventEmitter } from 'events';
 import fs from 'fs';
-import path from 'path';
+
+import { RESULTS_PATH } from '../../config/path';
 
 /**
- * Memory store = SINGLE SOURCE OF TRUTH for runtime state
- * NDJSON = append-only log for debugging / replay
+ * In-memory store for live crawl state; NDJSON append for dashboard replay.
  */
-
-const NDJSON_PATH = path.resolve(process.cwd(), 'data/results.ndjson');
 
 export const resultBus = new EventEmitter();
 
@@ -34,5 +32,5 @@ export function upsertResult(result: any): void {
   /**
    * append-only persistence log (non-blocking)
    */
-  fs.appendFile(NDJSON_PATH, JSON.stringify(result) + '\n', () => {});
+  fs.appendFile(RESULTS_PATH, JSON.stringify(result) + '\n', () => {});
 }

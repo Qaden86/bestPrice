@@ -13,8 +13,10 @@ import { Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
+import { SCREENSHOTS_DIR } from '../../config/path';
+
 export async function takeScreenshot(page: Page, name: string) {
-  const dir = path.resolve(process.cwd(), 'data/screenshots');
+  const dir = SCREENSHOTS_DIR;
 
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });

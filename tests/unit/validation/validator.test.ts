@@ -25,11 +25,23 @@ describe('validator', () => {
     expect(result.match).toBe(true);
   });
 
+  it('should accept cart gross with VAT on top of PDP net', () => {
+    const result = validator.validate({
+      url: 'https://test.com',
+      pdpPrice: 135,
+      cartPrice: 148.5,
+      addToCartSuccess: true,
+    });
+
+    expect(result.status).toBe('OK');
+    expect(result.match).toBe(true);
+  });
+
   it('should detect price mismatch', () => {
     const result = validator.validate({
       url: 'https://test.com',
       pdpPrice: 1499,
-      cartPrice: 1599,
+      cartPrice: 2000,
       addToCartSuccess: true,
     });
 

@@ -1,18 +1,6 @@
-/**
- * SELECTOR STRATEGY LAYER
- *
- * Centralized DOM selectors.
- * Must be stable across UI changes.
- *
- * RULE:
- * Prefer data-testid > semantic selectors > CSS classes
- */
-
 export const SELECTORS = {
   pdp: {
-    /**
-     * Primary PDP price selector
-     */
+    root: '[data-testid="product-detail"]',
     price: [
       '[data-testid="product-detail-price-sale"]',
       '[data-testid="product-detail-price"]',
@@ -20,19 +8,13 @@ export const SELECTORS = {
   },
 
   cart: {
-    /**
-     * Cart price selector
-     */
-    price: [
-      '[data-testid="cart-item-line-total"]',
-    ],
+    item: '[data-testid="cart-item"]',
+    openDrawer: '[data-testid="header-cart-link"]',
+    price: ['[data-testid="cart-item-line-total"]'],
   },
 
   actions: {
-    /**
-     * Add to cart button
-     */
-    addToCartButton:
-      '[data-testid="product-detail-add-to-cart"]',
+    addToCartButton: '[data-testid="product-detail-add-to-cart"]',
+    stickyAddToCart: '[data-testid="sticky-cta-add-to-cart"]',
   },
 };

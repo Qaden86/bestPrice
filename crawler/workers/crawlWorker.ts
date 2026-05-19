@@ -1,3 +1,5 @@
+import { BrowserContext } from 'playwright';
+
 import { BrowserPool } from '../browser/browserPool';
 import { crawl } from '../crawl';
 import { CrawlResult } from '../types/CrawlResult';
@@ -24,6 +26,10 @@ function normalizeUrl(input: string | { url: string }): string {
  * - browsers are reused
  * - contexts are NOT reused
  * - each job gets isolated clean session
+ *
+ * `newContext` lives inside the try block so a throw there still releases
+ * the browser back to the pool — otherwise the pool drains and deadlocks
+ * at `concurrency=N` after N failures.
  */
 export async function crawlWorker(
   inputUrl: string | { url: string },
@@ -32,19 +38,21 @@ export async function crawlWorker(
   const url = normalizeUrl(inputUrl);
 
   const browser = await pool.acquire();
-
-  /**
-   * Fresh isolated context per job
-   */
-  const context = await browser.newContext();
+  let context: BrowserContext | null = null;
 
   try {
-    const page = await context.newPage();
+    context = await browser.newContext({
+      locale: 'uk-UA',
+      viewport: { width: 1280, height: 900 },
+      userAgent:
+        'Mozilla/5.0 (compatible; BestPriceCrawler/1.0; +https://bestprice.com.ua)',
+    });
 
+    const page = await context.newPage();
     const result = await crawl(page, url);
 
-    if (!result) {
-      return {
+    return (
+      result ?? {
         url,
         pdpPrice: null,
         cartPrice: null,
@@ -52,10 +60,8 @@ export async function crawlWorker(
         status: 'FAIL',
         reason: 'CRAWL_FAILED',
         trace: [],
-      };
-    }
-
-    return result;
+      }
+    );
   } catch (e: any) {
     console.error('[WORKER ERROR]', url, e);
 
@@ -76,11 +82,11 @@ export async function crawlWorker(
       ],
     };
   } finally {
-    /**
-     * Dispose isolated session
-     */
-    await context.close();
-
+    if (context) {
+      await context.close().catch(() => {
+        /* best-effort */
+      });
+    }
     pool.release(browser);
   }
 }

@@ -1,4 +1,5 @@
 import { parsePrice } from '../utils/parsePrice';
+import { pricesMatch } from '../utils/priceCompare';
 
 type ValidationInput = {
   url: string;
@@ -14,8 +15,6 @@ export const validator = {
     const pdp = parsePrice(input.pdpPrice);
     const cart = parsePrice(input.cartPrice);
 
-    // ---------------- CART ----------------
-
     if (!input.addToCartSuccess) {
       return {
         status: 'FAIL',
@@ -23,8 +22,6 @@ export const validator = {
         match: false,
       } as const;
     }
-
-    // ---------------- PDP ----------------
 
     if (pdp.status === 'MISSING') {
       return {
@@ -42,8 +39,6 @@ export const validator = {
       } as const;
     }
 
-    // ---------------- CART PRICE ----------------
-
     if (cart.status === 'MISSING') {
       return {
         status: 'FAIL',
@@ -60,9 +55,7 @@ export const validator = {
       } as const;
     }
 
-    // ---------------- MATCH ----------------
-
-    if (pdp.value !== cart.value) {
+    if (!pricesMatch(pdp.value, cart.value)) {
       return {
         status: 'FAIL',
         reason: 'PRICE_MISMATCH',

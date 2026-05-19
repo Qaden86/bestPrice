@@ -1,8 +1,5 @@
 import type { PriceState } from '../types/price';
 
-/**
- * Normalized price parser (no business logic).
- */
 export function parsePrice(input: unknown): PriceState {
   if (input == null) {
     return { status: 'MISSING', value: null };
@@ -24,13 +21,24 @@ export function parsePrice(input: unknown): PriceState {
     return { status: 'MISSING', value: null };
   }
 
-  const match = raw.match(/-?\d+([.,]\d+)?/);
+  const numeric = raw.replace(/[^\d.,\s-]/g, '').trim();
 
-  if (!match) {
-    return { status: 'FAILED_PARSE', value: null };
+  if (!numeric) {
+    return { status: 'MISSING', value: null };
   }
 
-  const value = Number(match[0].replace(',', '.'));
+  const compactNoSpaces = numeric.replace(/\s/g, '');
+  const hasDecimalComma = /,\d{1,2}$/.test(compactNoSpaces);
+
+  let normalized: string;
+
+  if (hasDecimalComma) {
+    normalized = compactNoSpaces.replace(',', '.');
+  } else {
+    normalized = numeric.replace(/\s/g, '').replace(/,/g, '');
+  }
+
+  const value = Number(normalized);
 
   if (!Number.isFinite(value)) {
     return { status: 'FAILED_PARSE', value: null };
@@ -39,9 +47,6 @@ export function parsePrice(input: unknown): PriceState {
   return { status: 'OK', value };
 }
 
-/**
- * Convenience for extractors that only need a numeric value or null.
- */
 export function parsePriceNumber(input: unknown): number | null {
   const result = parsePrice(input);
   return result.status === 'OK' ? result.value : null;

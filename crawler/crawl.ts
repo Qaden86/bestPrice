@@ -7,11 +7,10 @@ import { takeScreenshot } from './utils/screenshot';
 import { createLogger } from './utils/logger';
 import { classifyTrace } from './observability/traceClassifier';
 import { waitForCartReady } from './utils/cartReady';
+import { dismissOverlays } from './utils/dismissOverlays';
 import { CrawlResult, TraceEvent } from './types/CrawlResult';
+import { SELECTORS } from './selectors/selectors';
 
-/**
- * CRAWL ORCHESTRATOR
- */
 export async function crawl(
   page: Page,
   url: string,
@@ -25,7 +24,7 @@ export async function crawl(
     message: url,
   });
 
-  // ---------------- NAVIGATION----------------
+  // ---------------- NAVIGATION ----------------
 
   try {
     await retry(
@@ -39,6 +38,12 @@ export async function crawl(
         delay: 500,
       },
     );
+
+    await dismissOverlays(page);
+
+    await page
+      .waitForSelector(SELECTORS.pdp.price[0], { timeout: 15_000 })
+      .catch(() => page.waitForSelector(SELECTORS.pdp.price[1], { timeout: 10_000 }));
 
     logger.log({
       step: 'navigation',
@@ -75,7 +80,6 @@ export async function crawl(
     data: pdpPrice,
   });
 
-  // FAIL
   if (pdpPrice == null) {
     return {
       url,
@@ -154,8 +158,6 @@ export async function crawl(
     message: validation.reason,
     bucket: classifyTrace(validation.reason),
   });
-
-  // ---------------- FINAL RESULT ----------------
 
   return {
     url,

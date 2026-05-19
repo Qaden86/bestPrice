@@ -9,8 +9,8 @@
     "crawl:stage:sample": "EXECUTION_MODE=sample dotenv -e .env.stage -- tsx scripts/run-crawl.ts",
     "crawl:prod:sample": "EXECUTION_MODE=sample dotenv -e .env.prod -- tsx scripts/run-crawl.ts",
 
-    "crawl:stage:full": "EXECUTION_MODE=full dotenv -e .env.stage -- tsx scripts/run-crawl.ts",
-    "crawl:prod:full": "EXECUTION_MODE=full dotenv -e .env.prod -- tsx scripts/run-crawl.ts",
+    "crawl:stage:full": "EXECUTION_MODE=full CRAWL_SCREENSHOTS=false dotenv -e .env.stage -- tsx scripts/run-crawl.ts",
+    "crawl:prod:full": "EXECUTION_MODE=full CRAWL_SCREENSHOTS=false CRAWL_CONCURRENCY=10 dotenv -e .env.prod -- tsx scripts/run-crawl.ts",
 
     "dashboard": "tsx dashboard/server.ts",
     "format": "prettier . --write",

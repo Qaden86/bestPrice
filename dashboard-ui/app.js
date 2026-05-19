@@ -1,160 +1,226 @@
 /**
  * Dashboard UI
- * - stable row registry (no JSON.stringify loss)
- * - trace inspector modal
- * - clean filtering
+ * Responsibilities:
+ * - render crawler results
+ * - maintain in-memory state
+ * - support snapshot + SSE stream
+ * - stable URL mapping (fix object URL bug)
  */
 
 let ALL_ROWS = [];
 window.__ROWS_MAP = {};
 
 /**
- * Load data from API
+ * Normalize URL into strict string.
+ * Prevents "object URL" bugs from backend.
  */
-async function load() {
+function getSafeUrl(r) {
+  if (!r?.url) return 'unknown';
+
+  if (typeof r.url === 'string') return r.url;
+
+  if (typeof r.url === 'object') return r.url.url || 'unknown';
+
+  return 'unknown';
+}
+
+/**
+ * Register row in lookup map (used for TRACE modal)
+ */
+function registerRow(r) {
+  const key = getSafeUrl(r);
+  window.__ROWS_MAP[key] = r;
+}
+
+/**
+ * Populate reason filter dynamically
+ */
+function renderReasonFilter() {
+  const select = document.getElementById('reasonFilter');
+
+  if (!select) return;
+
+  const currentValue = select.value;
+
+  const reasons = [
+    ...new Set(
+      ALL_ROWS
+        .map((r) => r.reason)
+        .filter(Boolean),
+    ),
+  ].sort();
+
+  select.innerHTML = `
+    <option value="">All reasons</option>
+    ${reasons
+      .map((reason) => `<option value="${reason}">${reason}</option>`)
+      .join('')}
+  `;
+
+  select.value = currentValue;
+}
+
+/**
+ * Snapshot load (initial page load)
+ */
+async function loadSnapshot() {
   try {
-    const [resultsRes, statsRes] = await Promise.all([
-      fetch('/api/results'),
-      fetch('/api/stats'),
-    ]);
+    const res = await fetch('/api/results');
+    ALL_ROWS = await res.json();
 
-    ALL_ROWS = await resultsRes.json();
-    const stats = await statsRes.json();
-
-    /**
-     * Build stable lookup map for modal usage
-     */
     window.__ROWS_MAP = {};
-    ALL_ROWS.forEach((r) => {
-      window.__ROWS_MAP[r.url] = r;
-    });
 
-    renderStats(stats);
+    ALL_ROWS.forEach((r) => registerRow(r));
+
+    renderStatsFromRows();
+    renderReasonFilter();
     applyFilters();
   } catch (e) {
-    console.error('[DASHBOARD] load failed:', e);
+    console.error('[SNAPSHOT LOAD FAILED]', e);
   }
 }
 
 /**
- * Stats renderer
+ * SSE STREAM (live updates)
  */
-function renderStats(stats) {
+function initStream() {
+  const eventSource = new EventSource('/api/results-stream');
+
+  eventSource.onmessage = (event) => {
+    try {
+      const row = JSON.parse(event.data);
+
+      const safeUrl = getSafeUrl(row);
+
+      const existingIndex = ALL_ROWS.findIndex(
+        (r) => getSafeUrl(r) === safeUrl,
+      );
+
+      if (existingIndex >= 0) {
+        ALL_ROWS[existingIndex] = row;
+      } else {
+        ALL_ROWS.push(row);
+      }
+
+      registerRow(row);
+
+      renderStatsFromRows();
+      renderReasonFilter();
+      applyFilters();
+    } catch (e) {
+      console.warn('[STREAM PARSE ERROR]', e);
+    }
+  };
+
+  eventSource.onerror = (err) => {
+    console.error('[STREAM ERROR]', err);
+  };
+}
+
+/**
+ * STATS (computed locally)
+ */
+function renderStatsFromRows() {
+  const total = ALL_ROWS.length;
+
+  const success = ALL_ROWS.filter(
+    (r) => r.status === 'OK' && r.match,
+  ).length;
+
+  const failed = total - success;
+
+  const cartFailures = ALL_ROWS.filter(
+    (r) =>
+      r.reason === 'ADD_TO_CART_FAILED' ||
+      r.cartPrice == null,
+  ).length;
+
   document.getElementById('stats').innerHTML = `
     <div class="stat-card">
       <div class="stat-title">TOTAL</div>
-      <div class="stat-value">${stats.total}</div>
+      <div class="stat-value">${total}</div>
     </div>
 
     <div class="stat-card success">
       <div class="stat-title">SUCCESS RATE</div>
-      <div class="stat-value">${(stats.successRate * 100).toFixed(1)}%</div>
+      <div class="stat-value">
+        ${total ? ((success / total) * 100).toFixed(1) : 0}%
+      </div>
     </div>
 
     <div class="stat-card failed">
       <div class="stat-title">FAIL RATE</div>
-      <div class="stat-value">${(stats.failureRate * 100).toFixed(1)}%</div>
+      <div class="stat-value">
+        ${total ? ((failed / total) * 100).toFixed(1) : 0}%
+      </div>
     </div>
 
     <div class="stat-card">
       <div class="stat-title">CART FAIL RATE</div>
-      <div class="stat-value">${(stats.cartFailureRate * 100).toFixed(1)}%</div>
+      <div class="stat-value">
+        ${total ? ((cartFailures / total) * 100).toFixed(1) : 0}%
+      </div>
     </div>
   `;
 }
 
 /**
- * Filters
+ * FILTERS
  */
 function applyFilters() {
-  const search = document.getElementById('search')?.value?.toLowerCase() || '';
+  const search =
+    document.getElementById('search')?.value?.toLowerCase() || '';
 
-  const status = document.getElementById('statusFilter')?.value || '';
+  const status =
+    document.getElementById('statusFilter')?.value || '';
+
+  const reason =
+    document.getElementById('reasonFilter')?.value || '';
 
   let rows = [...ALL_ROWS];
 
   if (search) {
-    rows = rows.filter((r) => (r.url || '').toLowerCase().includes(search));
+    rows = rows.filter((r) =>
+      (getSafeUrl(r) || '').toLowerCase().includes(search),
+    );
   }
 
   if (status) {
     rows = rows.filter((r) => r.status === status);
   }
 
+  if (reason) {
+    rows = rows.filter((r) => r.reason === reason);
+  }
+
   renderTable(rows);
 }
 
 /**
- * Badge renderer
- */
-function getBadge(status) {
-  if (status === 'OK') {
-    return `<span class="badge badge-ok">OK</span>`;
-  }
-
-  return `<span class="badge badge-error">ERROR</span>`;
-}
-
-/**
- * Open trace safely
- */
-function openTraceByUrl(url) {
-  const row = window.__ROWS_MAP[url];
-
-  if (!row) {
-    console.warn('[TRACE] Row not found:', url);
-    return;
-  }
-
-  openTrace(row);
-}
-
-/**
- * Close modal
- */
-function closeTrace() {
-  document.getElementById('traceModal').style.display = 'none';
-}
-
-/**
- * Trace modal renderer
+ * TRACE MODAL
  */
 function openTrace(row) {
   const trace = Array.isArray(row.trace) ? row.trace : [];
 
-  const pdp = row.pdp?.value ?? '-';
-  const cart = row.cart?.value ?? '-';
+  const url = getSafeUrl(row);
+
+  const pdp = row.pdpPrice ?? '-';
+  const cart = row.cartPrice ?? '-';
 
   const diff =
-    row.pdp?.status === 'OK' && row.cart?.status === 'OK'
-      ? row.pdp.value - row.cart.value
+    row.pdpPrice != null && row.cartPrice != null
+      ? Math.abs(row.pdpPrice - row.cartPrice)
       : '-';
 
   const traceHtml = trace
     .map(
       (t) => `
     <div class="trace-item">
-
-      <div class="trace-step">
-        ${t.step}
-      </div>
-
-      <div class="trace-status">
-        ${t.status}
-      </div>
-
-      <div class="trace-time">
-        ${t.ts || '-'}
-      </div>
-
-      ${t.message ? `<div class="trace-msg">${t.message}</div>` : ''}
-
-      ${
-        t.data !== undefined
-          ? `<div class="trace-data">${JSON.stringify(t.data)}</div>`
-          : ''
-      }
-
+      <div><b>${t.step}</b></div>
+      <div>${t.status}</div>
+      <div>${t.ts || '-'}</div>
+      ${t.message ? `<div>${JSON.stringify(t.message)}</div>` : ''}
+      ${t.data ? `<pre>${JSON.stringify(t.data, null, 2)}</pre>` : ''}
     </div>
   `,
     )
@@ -164,102 +230,79 @@ function openTrace(row) {
     <div class="modal-backdrop" onclick="closeTrace()"></div>
 
     <div class="modal">
-
-      <!-- HEADER -->
       <div class="modal-header">
-        <div class="modal-title">TRACE INSPECTOR</div>
+        <div>TRACE</div>
         <button onclick="closeTrace()">Close</button>
       </div>
 
-      <!-- URL -->
-      <div class="modal-url">
-        ${row.url}
+      <div class="modal-url">${url}</div>
+
+      <div>
+        <b>Status:</b> ${row.status}<br/>
+        <b>Reason:</b> ${row.reason}<br/>
+        <b>PDP:</b> ${pdp}<br/>
+        <b>Cart:</b> ${cart}<br/>
+        <b>Diff:</b> ${diff}
       </div>
 
-      <!-- SUMMARY -->
-      <div class="modal-summary">
+      <hr/>
 
-        <div><b>Status:</b> ${row.status}</div>
-        <div><b>Reason:</b> ${row.reason || '-'}</div>
-
-        <hr />
-
-        <div><b>PDP:</b> ${pdp}</div>
-        <div><b>Cart:</b> ${cart}</div>
-        <div><b>Diff:</b> ${diff}</div>
-
-      </div>
-
-      <hr />
-
-      <!-- TRACE -->
-      <div class="trace-body">
-        ${traceHtml}
-      </div>
-
+      ${traceHtml}
     </div>
   `;
 
   document.getElementById('traceModal').style.display = 'block';
 }
 
+function openTraceByUrl(url) {
+  const row = window.__ROWS_MAP[url];
+
+  if (!row) {
+    console.warn('[TRACE] not found:', url);
+    return;
+  }
+
+  openTrace(row);
+}
+
+function closeTrace() {
+  document.getElementById('traceModal').style.display = 'none';
+}
+
 /**
- * Table renderer
+ * TABLE RENDERER
  */
 function renderTable(rows) {
   const table = document.getElementById('table');
 
   if (!rows.length) {
-    table.innerHTML = `
-      <tr>
-        <td colspan="6">No results</td>
-      </tr>
-    `;
+    table.innerHTML = `<tr><td colspan="6">No results</td></tr>`;
     return;
   }
 
   table.innerHTML = rows
     .map((r) => {
-      const pdp = r.pdp?.value ?? '-';
-      const cart = r.cart?.value ?? '-';
+      const url = getSafeUrl(r);
+
+      const pdp = r.pdpPrice ?? '-';
+      const cart = r.cartPrice ?? '-';
 
       const diff =
-        r.pdp?.status === 'OK' && r.cart?.status === 'OK'
-          ? Math.abs(r.pdp.value - r.cart.value)
+        r.pdpPrice != null && r.cartPrice != null
+          ? Math.abs(r.pdpPrice - r.cartPrice)
           : '-';
 
       const rowClass = r.status === 'OK' ? 'row-ok' : 'row-fail';
 
       return `
       <tr class="${rowClass}">
+        <td>${r.status}</td>
 
-        <td>${getBadge(r.status)}</td>
-
-        <td class="url">
-          <div class="url-actions">
-
-            <a
-              class="open-btn"
-              href="${r.url}"
-              target="_blank"
-            >
-              OPEN
-            </a>
-
-            <button
-              class="copy-btn"
-              onclick="navigator.clipboard.writeText('${r.url}')"
-            >
-              COPY
-            </button>
-
-            <button
-              class="copy-btn"
-              onclick="openTraceByUrl('${r.url}')"
-            >
-              TRACE
-            </button>
-
+        <td>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button onclick="window.open('${url}', '_blank')">OPEN</button>
+            <button onclick="navigator.clipboard.writeText('${url}')">COPY</button>
+            <button onclick="openTraceByUrl('${url}')">TRACE</button>
           </div>
         </td>
 
@@ -267,7 +310,6 @@ function renderTable(rows) {
         <td>${cart}</td>
         <td>${diff}</td>
         <td>${r.reason || '-'}</td>
-
       </tr>
     `;
     })
@@ -275,20 +317,22 @@ function renderTable(rows) {
 }
 
 /**
- * Events
+ * EVENTS
  */
-document.getElementById('search')?.addEventListener('input', applyFilters);
+document
+  .getElementById('search')
+  ?.addEventListener('input', applyFilters);
 
 document
   .getElementById('statusFilter')
   ?.addEventListener('change', applyFilters);
 
-/**
- * Init
- */
-load();
+document
+  .getElementById('reasonFilter')
+  ?.addEventListener('change', applyFilters);
 
 /**
- * Live refresh
+ * INIT
  */
-setInterval(load, 2000);
+loadSnapshot();
+initStream();

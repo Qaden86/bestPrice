@@ -1,39 +1,53 @@
+import { BrowserPool } from '../browser/browserPool';
 import { crawlWorker } from '../workers/crawlWorker';
-import { CrawlResult } from '../types/CrawlResult';
-
-type EngineInput = {
-  urls: (string | { url: string })[];
-  concurrency: number;
-};
+import { upsertResult } from '../output/resultStore';
 
 /**
- * Concurrent Engine (SAFE VERSION)
- *
+ * Queue-based concurrent engine
+ * - true parallelism = browser instances
  */
-export async function runConcurrentEngine(
-  params: EngineInput,
-): Promise<CrawlResult[]> {
-  const urls = params.urls.map((u) =>
+export async function runConcurrentEngine(params: {
+  urls: (string | { url: string })[];
+  concurrency: number;
+}) {
+  const urls = params.urls.map(u =>
     typeof u === 'string' ? u : u.url,
   );
 
-  const results: CrawlResult[] = new Array(urls.length);
+  const pool = new BrowserPool(params.concurrency);
+  await pool.init();
 
-  await Promise.all(
-    urls.map(async (url, index) => {
-      if (!url) {
-        console.log(`[Worker ${index}] INVALID URL`);
-        return;
-      }
+  let cursor = 0;
+  let completed = 0;
 
-      console.log(`[Worker ${index}] ${url}`);
+  const getNext = () => {
+    if (cursor >= urls.length) return null;
+    return urls[cursor++];
+  };
 
-      const result = await crawlWorker(url);
+  const worker = async () => {
+    while (true) {
+      const url = getNext();
+      if (!url) return;
 
-      // 🔥 SAFE WRITE (NO PUSH RACE)
-      results[index] = result;
-    }),
+      const result = await crawlWorker(url, pool);
+
+      /**
+       * SINGLE SOURCE OF TRUTH WRITE
+       */
+      upsertResult(result);
+
+      completed++;
+      console.log(`[PROGRESS] ${completed}/${urls.length}`);
+    }
+  };
+
+  const workers = Array.from(
+    { length: params.concurrency },
+    () => worker(),
   );
 
-  return results.filter(Boolean);
+  await Promise.all(workers);
+
+  await pool.close();
 }

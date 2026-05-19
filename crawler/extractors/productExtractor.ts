@@ -1,33 +1,58 @@
 import { Page } from 'playwright';
 
+import { SELECTORS } from '../selectors/selectors';
+
 function normalizePrice(text: string | null): number | null {
   if (!text) return null;
 
-  const cleaned = text.replace(/\u00A0/g, ' ').replace(/[^\d.,-]/g, '');
+  const cleaned = text
+    .replace(/\u00A0/g, ' ')
+    .replace(/[^\d.,-]/g, '');
 
-  const num = Number(cleaned);
+  const normalized = cleaned.replace(',', '.');
+
+  const num = Number(normalized);
 
   return Number.isFinite(num) ? num : null;
 }
 
 export const productExtractor = {
   async extractPdpPrice(page: Page): Promise<number | null> {
-    const el = page
-      .locator('span.text-2xl.font-bold.text-primary-text')
-      .first();
+    for (const selector of SELECTORS.pdp.price) {
+      try {
+        const el = page.locator(selector).first();
 
-    const text = await el.textContent();
+        if (!(await el.count())) continue;
 
-    return normalizePrice(text);
+        const text = await el.textContent();
+        const price = normalizePrice(text);
+
+        if (price !== null) {
+          return price;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return null;
   },
 
   async clickAddToCart(page: Page): Promise<boolean> {
     try {
       const btn = page
-        .locator('button:has-text("Додати в кошик")')
+        .locator(SELECTORS.actions.addToCartButton)
         .first();
 
-      await btn.click({ timeout: 8000 });
+      await btn.scrollIntoViewIfNeeded();
+
+      // allow sticky UI / transitions to settle
+      await page.waitForTimeout(300);
+
+      await btn.click({
+        timeout: 8000,
+        force: true,
+      });
 
       return true;
     } catch (e) {
@@ -38,9 +63,8 @@ export const productExtractor = {
   async extractCartPrice(page: Page): Promise<number | null> {
     try {
       const el = page
-        .locator('span.font-bold.text-primary-text')
-        .filter({ hasText: /₴/ })
-        .last();
+        .locator(SELECTORS.cart.price[0])
+        .first();
 
       const text = await el.textContent();
 

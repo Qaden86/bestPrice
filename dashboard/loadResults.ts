@@ -1,36 +1,52 @@
 import fs from 'fs';
 import path from 'path';
 
-const RESULTS_PATH = path.resolve(process.cwd(), 'data/results.json');
+const NDJSON_PATH = path.resolve(
+  process.cwd(),
+  'data/results.ndjson',
+);
 
 /**
- * Safe loader that always returns normalized crawler results array.
- * Supports multiple historical formats for backward compatibility.
+ * NDJSON is cross-process source of truth
  */
 export function loadResults(): any[] {
   try {
-    if (!fs.existsSync(RESULTS_PATH)) {
+    if (!fs.existsSync(NDJSON_PATH)) {
       return [];
     }
 
-    const raw = fs.readFileSync(RESULTS_PATH, 'utf-8');
+    const raw = fs.readFileSync(
+      NDJSON_PATH,
+      'utf-8',
+    );
 
     if (!raw) return [];
 
-    const parsed = JSON.parse(raw);
+    const lines = raw
+      .split('\n')
+      .filter(Boolean);
 
-    // Case 1: already array
-    if (Array.isArray(parsed)) return parsed;
+    const map = new Map<string, any>();
 
-    // Case 2: wrapped format { results: [] }
-    if (Array.isArray(parsed?.results)) return parsed.results;
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line);
 
-    // Case 3: wrapped format { data: [] }
-    if (Array.isArray(parsed?.data)) return parsed.data;
+        const key =
+          typeof parsed.url === 'string'
+            ? parsed.url
+            : parsed.url?.url;
 
-    return [];
-  } catch (e) {
-    console.warn('[DASHBOARD] load failed:', e);
+        if (!key) continue;
+
+        map.set(key, parsed);
+      } catch {
+        continue;
+      }
+    }
+
+    return Array.from(map.values());
+  } catch {
     return [];
   }
 }

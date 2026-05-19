@@ -1,29 +1,48 @@
-import { chromium } from 'playwright';
+import { BrowserPool } from '../browser/browserPool';
 import { crawl } from '../crawl';
 import { CrawlResult } from '../types/CrawlResult';
 
 /**
- * WORKER LAYER
- *
- * Responsibilities:
- * - browser lifecycle management
- * - isolation per crawl
- * - error containment (NO silent failures)
+ * Normalize URL input into strict string format.
  */
-export async function crawlWorker(url: string): Promise<CrawlResult> {
-  const browser = await chromium.launch({
-    headless: true,
-  });
+function normalizeUrl(input: string | { url: string }): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  if (input && typeof input.url === 'string') {
+    return input.url;
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Single crawl execution unit
+ *
+ * IMPORTANT:
+ * - browsers are reused
+ * - contexts are NOT reused
+ * - each job gets isolated clean session
+ */
+export async function crawlWorker(
+  inputUrl: string | { url: string },
+  pool: BrowserPool,
+): Promise<CrawlResult> {
+  const url = normalizeUrl(inputUrl);
+
+  const browser = await pool.acquire();
+
+  /**
+   * Fresh isolated context per job
+   */
+  const context = await browser.newContext();
 
   try {
-    const page = await browser.newPage();
+    const page = await context.newPage();
 
     const result = await crawl(page, url);
 
-    /**
-     * SAFETY GUARD:
-     * ensure crawler never returns undefined/null
-     */
     if (!result) {
       return {
         url,
@@ -38,20 +57,30 @@ export async function crawlWorker(url: string): Promise<CrawlResult> {
 
     return result;
   } catch (e: any) {
-    /**
-     * HARD FAILURE PROTECTION:
-     * ensures CI always gets deterministic output
-     */
+    console.error('[WORKER ERROR]', url, e);
+
     return {
       url,
       pdpPrice: null,
       cartPrice: null,
       match: false,
       status: 'FAIL',
-      reason: 'CRAWL_FAILED',
-      trace: [],
+      reason: e?.message || 'CRAWL_FAILED',
+      trace: [
+        {
+          step: 'worker',
+          status: 'ERROR',
+          message: e?.message || 'UNKNOWN_ERROR',
+          ts: Date.now(),
+        },
+      ],
     };
   } finally {
-    await browser.close();
+    /**
+     * Dispose isolated session
+     */
+    await context.close();
+
+    pool.release(browser);
   }
 }

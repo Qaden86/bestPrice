@@ -1,8 +1,17 @@
 import path from 'path';
 
 /**
- * Centralized path registry.
- * Used by crawler + dashboard.
+ * Centralized filesystem paths
  */
 
-export const RESULTS_PATH = path.resolve(process.cwd(), 'data/results.json');
+export const DATA_DIR = path.resolve(process.cwd(), 'data');
+
+export const RESULTS_PATH = path.resolve(
+  DATA_DIR,
+  'results.ndjson',
+);
+
+export const SCREENSHOTS_DIR = path.resolve(
+  DATA_DIR,
+  'screenshots',
+);

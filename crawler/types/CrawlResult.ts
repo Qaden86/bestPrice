@@ -1,4 +1,4 @@
-import { TraceData } from './TraceTypes';
+import { TracePayload } from './TraceTypes';
 import { TraceBucket } from './TraceBuckets';
 import { TraceStep } from './TraceSteps';
 
@@ -19,9 +19,11 @@ export type CrawlReason =
   | 'NAVIGATION_FAILED'
 
   // extraction
+  | 'PDP_NOT_FOUND'
   | 'PDP_PRICE_MISSING'
   | 'PDP_PRICE_PARSE_FAILED'
 
+  | 'CART_NOT_READY'
   | 'CART_PRICE_MISSING'
   | 'CART_PRICE_PARSE_FAILED'
 
@@ -47,7 +49,7 @@ export type TraceEvent = {
 
   message?: string;
 
-  data?: TraceData;
+  data?: TracePayload;
 
   bucket?: TraceBucket;
 

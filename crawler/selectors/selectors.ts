@@ -3,25 +3,36 @@
  *
  * Centralized DOM selectors.
  * Must be stable across UI changes.
+ *
+ * RULE:
+ * Prefer data-testid > semantic selectors > CSS classes
  */
 
 export const SELECTORS = {
   pdp: {
     /**
-     * Primary PDP price selector(s)
+     * Primary PDP price selector
      */
-    price: ['span.text-2xl.font-bold.text-primary-text'],
-
-    /**
-     * Add to cart button selector
-     */
-    addToCartButton: 'button:has-text("Додати в кошик")',
+    price: [
+      '[data-testid="product-detail-price-sale"]',
+      '[data-testid="product-detail-price"]',
+    ],
   },
 
   cart: {
     /**
-     * fallback selectors (NOT used globally anymore)
+     * Cart price selector
      */
-    itemLink: 'a[href*="/produkt/"]',
+    price: [
+      '[data-testid="cart-item-line-total"]',
+    ],
+  },
+
+  actions: {
+    /**
+     * Add to cart button
+     */
+    addToCartButton:
+      '[data-testid="product-detail-add-to-cart"]',
   },
 };

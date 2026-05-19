@@ -13,7 +13,7 @@ test('price consistency check - verifies PDP price matches cart price after add-
 
   expect(result.pdpPrice).toBeDefined();
   expect(result.cartPrice).toBeDefined();
-  expect(result.priceMatch).toBe(true);
+  expect(result.match).toBe(true);
 
   await browser.close();
 });

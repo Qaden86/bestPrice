@@ -2,64 +2,124 @@ import express from 'express';
 import path from 'path';
 
 import { loadResults } from './loadResults';
-import { parsePrice } from '../crawler/utils/parsePrice';
-import { buildTraceInsights } from '../crawler/observability/buildTraceInsights';
+
+import {
+  resultBus,
+} from '../crawler/output/resultStore';
 
 const app = express();
 const PORT = 3000;
 
-const UI_PATH = path.resolve(__dirname, '../dashboard-ui');
+const UI_PATH = path.resolve(
+  __dirname,
+  '../dashboard-ui',
+);
 
-const INDEX_HTML = path.resolve(UI_PATH, 'index.html');
+const INDEX_HTML = path.resolve(
+  UI_PATH,
+  'index.html',
+);
 
 app.use(express.static(UI_PATH));
 
 /**
- * API: results
+ * Snapshot API
  */
 app.get('/api/results', (req, res) => {
   const results = loadResults();
 
-  const enriched = results.map((r) => {
-    const pdp = parsePrice(r.pdpPrice);
+  res.json(
+    results.map((r) => ({
+      url:
+        typeof r.url === 'object'
+          ? r.url.url
+          : r.url,
 
-    const cart = parsePrice(r.cartPrice);
+      status: r.status ?? 'ERROR',
+      reason: r.reason ?? 'UNKNOWN',
 
-    return {
-      url: typeof r.url === 'string' ? r.url : 'unknown',
+      pdpPrice: r.pdpPrice ?? null,
+      cartPrice: r.cartPrice ?? null,
 
-      status: r.status,
-      reason: r.reason,
+      match: !!r.match,
 
-      pdp,
-      cart,
-
-      match: r.match === true,
-
-      //debug trace for modal
-      trace: r.trace ?? [],
-    };
-  });
-
-  res.json(enriched);
+      trace: Array.isArray(r.trace)
+        ? r.trace
+        : [],
+    })),
+  );
 });
 
 /**
- * API: stats
+ * Stats API
  */
 app.get('/api/stats', (req, res) => {
   const results = loadResults();
 
-  const insights = buildTraceInsights(results);
+  const total = results.length;
+
+  const success = results.filter(
+    (r) => r.status === 'OK' && r.match,
+  ).length;
+
+  const failed = total - success;
 
   res.json({
-    total: insights.total,
-    successRate: insights.successRate,
-    failureRate: insights.failureRate,
+    total,
+    successRate: total
+      ? success / total
+      : 0,
 
-    bucketDistribution: insights.bucketDistribution,
-    topFailingSteps: insights.topFailingSteps,
-    cartFailureRate: insights.cartFailureRate,
+    failureRate: total
+      ? failed / total
+      : 0,
+  });
+});
+
+/**
+ * SSE realtime stream
+ */
+app.get('/api/results-stream', (req, res) => {
+  res.setHeader(
+    'Content-Type',
+    'text/event-stream',
+  );
+
+  res.setHeader(
+    'Cache-Control',
+    'no-cache',
+  );
+
+  res.setHeader(
+    'Connection',
+    'keep-alive',
+  );
+
+  /**
+   * Send initial snapshot
+   */
+  const snapshot = loadResults();
+
+  for (const item of snapshot) {
+    res.write(
+      `data: ${JSON.stringify(item)}\n\n`,
+    );
+  }
+
+  /**
+   * Realtime updates
+   */
+  const listener = (result: any) => {
+    res.write(
+      `data: ${JSON.stringify(result)}\n\n`,
+    );
+  };
+
+  resultBus.on('update', listener);
+
+  req.on('close', () => {
+    resultBus.off('update', listener);
+    res.end();
   });
 });
 
@@ -71,5 +131,7 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Dashboard: http://localhost:${PORT}`);
+  console.log(
+    `Dashboard: http://localhost:${PORT}`,
+  );
 });

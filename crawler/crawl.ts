@@ -6,13 +6,11 @@ import { retry } from './retry/retry';
 import { takeScreenshot } from './utils/screenshot';
 import { createLogger } from './utils/logger';
 import { classifyTrace } from './observability/traceClassifier';
-
+import { waitForCartReady } from './utils/cartReady';
 import { CrawlResult, TraceEvent } from './types/CrawlResult';
 
 /**
  * CRAWL ORCHESTRATOR
- *
- * Single URL execution unit
  */
 export async function crawl(
   page: Page,
@@ -27,18 +25,18 @@ export async function crawl(
     message: url,
   });
 
-  // ---------------- NAVIGATION ----------------
+  // ---------------- NAVIGATION----------------
 
   try {
     await retry(
       () =>
         page.goto(url, {
-          waitUntil: 'networkidle',
-          timeout: 60000,
+          waitUntil: 'domcontentloaded',
+          timeout: 45000,
         }),
       {
-        retries: 2,
-        delay: 1000,
+        retries: 1,
+        delay: 500,
       },
     );
 
@@ -77,25 +75,44 @@ export async function crawl(
     data: pdpPrice,
   });
 
-  // ---------------- CART CLICK ----------------
+  // FAIL
+  if (pdpPrice == null) {
+    return {
+      url,
+      pdpPrice: null,
+      cartPrice: null,
+      match: false,
+      status: 'FAIL',
+      reason: 'PDP_NOT_FOUND',
+      trace,
+    };
+  }
+
+  // ---------------- CART ----------------
 
   let addToCartSuccess = false;
 
   try {
     addToCartSuccess = await retry(
       () => productExtractor.clickAddToCart(page),
-      { retries: 2, delay: 800 },
+      { retries: 2, delay: 500 },
     );
 
     logger.log({
       step: 'cart.click',
       status: addToCartSuccess ? 'OK' : 'ERROR',
     });
+
+    if (!addToCartSuccess) {
+      throw new Error('Add to cart failed');
+    }
+
+    await waitForCartReady(page);
   } catch (e: any) {
-    const shot = await takeScreenshot(page, 'cart-click-failed');
+    const shot = await takeScreenshot(page, 'cart-not-ready');
 
     logger.log({
-      step: 'cart.click',
+      step: 'cart.wait',
       status: 'ERROR',
       message: e.message,
       data: { screenshot: shot },
@@ -107,14 +124,14 @@ export async function crawl(
       cartPrice: null,
       match: false,
       status: 'FAIL',
-      reason: 'ADD_TO_CART_FAILED',
+      reason: 'CART_NOT_READY',
       trace,
     };
   }
 
-  // ---------------- CART ----------------
+  // ---------------- CART EXTRACT ----------------
 
-  const cartPrice = await productExtractor.extractCartPrice(page, url);
+  const cartPrice = await productExtractor.extractCartPrice(page);
 
   logger.log({
     step: 'cart.extract',
@@ -138,32 +155,15 @@ export async function crawl(
     bucket: classifyTrace(validation.reason),
   });
 
-  // ---------------- SAFETY GATE ----------------
-  if (
-    validation.status === 'OK' &&
-    (
-      pdpPrice == null ||
-      cartPrice == null
-    )
-  ) {
-    throw new Error(
-      'INTERNAL_ERROR: INVALID_SUCCESS_STATE',
-    );
-  }
-
   // ---------------- FINAL RESULT ----------------
 
   return {
     url,
-
     pdpPrice,
     cartPrice,
-
     match: validation.match,
-
     status: validation.status,
     reason: validation.reason,
-
     trace,
   };
 }

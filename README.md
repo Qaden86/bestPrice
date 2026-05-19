@@ -1,360 +1,169 @@
-# BestPrice UA — E2E Automation Framework
+BestPrice UA — Hybrid Playwright Automation & Crawling System
 
-End-to-end test automation framework for [bestprice.com.ua](https://bestprice.com.ua) built with **TypeScript** and **Playwright**. The framework follows the Page Object Model, supports parallel cross-browser execution, and produces rich HTML/Allure reports out of the box.
+A hybrid Playwright-based system combining:
 
----
+distributed crawling engine for price extraction
+reusable automation layer (E2E-ready architecture)
+dashboard for execution analytics
+ingestion pipeline from sitemap sources
 
-## Table of Contents
+Built with TypeScript + Playwright.
 
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Running Tests](#running-tests)
-- [Reports](#reports)
-- [Writing Tests](#writing-tests)
-- [Page Object Model](#page-object-model)
-- [Test Data](#test-data)
-- [CI/CD](#cicd)
-- [Code Quality](#code-quality)
-- [Troubleshooting](#troubleshooting)
+⚙️System Overview
 
----
+The project operates as a pipeline-based execution system:
+Sitemap → URL Ingestion → Filtering → Concurrent Execution → Extraction → Storage → Dashboard
 
-## Tech Stack
+🧩 Core Capabilities
+Crawling Engine
+Sitemap-based ingestion
+Product page filtering
+Concurrent execution with p-limit
+Browser pooling (optimized Playwright lifecycle)
+Retry-safe navigation layer
+Screenshot capture on failure
+Structured trace logging per URL
 
-| Tool                    | Purpose                          |
-| ----------------------- | -------------------------------- |
-| **Playwright**          | Browser automation & test runner |
-| **TypeScript**          | Static typing                    |
-| **Node.js (>=18)**      | Runtime                          |
-| **Allure Report**       | Rich HTML reporting              |
-| **ESLint + Prettier**   | Code style & static analysis     |
-| **Husky + lint-staged** | Pre-commit hooks                 |
-| **GitHub Actions**      | CI pipeline                      |
-| **dotenv**              | Environment variable management  |
+🧪 Automation Layer (E2E-ready)
+Page Object Model structure
+Reusable product/cart extraction logic
+Selector abstraction layer (data-testid priority)
+Validator-based price matching logic
+Extensible for full E2E test suite
 
----
+📊 Dashboard System
+Local Express server (http://localhost:3000)
+JSON-based results API
+Aggregated metrics:
+success rate
+cart failure rate
+match accuracy
+Raw crawl trace inspection
 
-## Project Structure
+🧱 Architecture
+Execution Flow
+run-crawl.ts
+↓
+getSitemapUrls()
+↓
+isProductPage filter
+↓
+runConcurrentEngine()
+↓
+BrowserPool (2–3 instances)
+↓
+crawlWorker()
+↓
+crawl() orchestrator
+↓
+productExtractor + validator
+↓
+writeResults()
+↓
+dashboard UI
 
-```
-bestPrice/
-├── src/
-│   ├── pages/              # Page Object classes
-│   │   ├── BasePage.ts
-│   │   ├── HomePage.ts
-│   │   ├── SearchResultsPage.ts
-│   │   ├── ProductPage.ts
-│   │   ├── CartPage.ts
-│   │   └── CheckoutPage.ts
-│   ├── components/         # Reusable UI components (header, footer, modals)
-│   ├── fixtures/           # Custom Playwright fixtures
-│   ├── helpers/            # Utility functions (date, string, api)
-│   ├── api/                # API clients for backend calls
-│   └── types/              # Shared TypeScript types & interfaces
-├── tests/
-│   ├── e2e/                # End-to-end UI scenarios
-│   ├── api/                # API-level tests
-│   └── smoke/              # Smoke suite
-├── data/                   # Test data (JSON, fixtures)
-├── config/
-│   └── env/                # Per-environment configs (.dev, .stage, .prod)
-├── reports/                # Generated reports (gitignored)
-├── playwright.config.ts    # Playwright runner config
-├── tsconfig.json
-├── .eslintrc.cjs
-├── .prettierrc
-├── .env.example
-└── package.json
-```
+Concurrency Model
+Controlled via p-limit
+Browser lifecycle managed via BrowserPool
+One Chromium instance serves multiple contexts/pages
+Prevents browser explosion under load
 
----
+🚀 Running the System
+1. Install dependencies
+   npm ci
+   npx playwright install --with-deps
+2. Configure environment
 
-## Prerequisites
+Create .env:
 
-- **Node.js** `>= 18.x`
-- **npm** `>= 9.x` (or `pnpm`/`yarn`)
-- Git
-
-Verify installation:
-
-```bash
-node -v
-npm -v
-```
-
----
-
-## Installation
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/<your-org>/bestPrice.git
-cd bestPrice
-
-# 2. Install dependencies
-npm ci
-
-# 3. Install Playwright browsers
-npx playwright install --with-deps
-
-# 4. Copy environment template
-cp .env.example .env
-```
-
----
-
-## Configuration
-
-### Environment variables
-
-Create a `.env` file at the project root (use `.env.example` as a template):
-
-```env
 BASE_URL=https://bestprice.com.ua
-ENV=prod
-HEADLESS=true
-DEFAULT_TIMEOUT=30000
-RETRIES=1
-WORKERS=4
+LIMIT=50
+CONCURRENCY=3
+3. Run crawler
+   npm run crawl
+   Stage mode
+   npm run crawl:stage
+4. Run dashboard
+   npm run dashboard
 
-# Test user credentials
-USER_EMAIL=qa.user@example.com
-USER_PASSWORD=********
+Open:
+http://localhost:3000
 
-# API
-API_BASE_URL=https://api.bestprice.com.ua
-API_TOKEN=********
-```
+⚙️ Scripts
+Command	Description
+npm run crawl	Run crawler pipeline
+npm run crawl:stage	Run crawler with stage env
+npm run dashboard	Start analytics server
+npm run format	Format code
+npm test	Run unit tests
+npm run test:e2e	Playwright E2E tests
 
-### `playwright.config.ts` highlights
+Configuration
+Environment variables
+Variable	Description
+BASE_URL	Target website
+LIMIT	Max URLs per run
+CONCURRENCY	Parallel crawl limit
 
-- Multiple projects: `chromium`, `firefox`, `webkit`, `Mobile Chrome`, `Mobile Safari`
-- Auto-waiting expectations and trace collection on failure
-- HTML + Allure reporters
-- Configurable retries and workers via env vars
+📦 Key Modules
+🧭 Ingestion
+sitemapFetcher.ts
+urlFilter.ts
+🧪 Core crawler
+crawl.ts (orchestrator)
+crawlWorker.ts
+BrowserPool
+🔍 Extraction layer
+productExtractor.ts
+selector strategy system
+🧠 Validation
+validator.ts
+📊 Observability
+trace logger
+screenshot system
+trace classifier
+💾 Output
+file-based resultWriter.ts
 
----
+🧪 Testing Strategy
 
-## Running Tests
+The system is designed to support:
 
-```bash
-# All tests in all browsers
-npm test
+E2E UI tests (Playwright)
+API tests (Vitest)
+Hybrid validation flows
+Regression suites for pricing accuracy
 
-# A specific suite
-npm run test:smoke
-npm run test:e2e
-npm run test:api
+📊 Performance Notes
 
-# Single project (browser)
-npx playwright test --project=chromium
+Recommended settings:
 
-# Single file or test by title
-npx playwright test tests/e2e/search.spec.ts
-npx playwright test -g "user can add product to cart"
+Environment	Concurrency	Browsers
+MacBook Dev	3–5	2
+Server (8–16GB RAM)	5–10	2–3
+Production	10–20	3–5
 
-# Headed / debug / UI modes
-npm run test:headed
-npm run test:debug
-npm run test:ui
+⚠️ Design Principles
+No browser per task (pooling required)
+Deterministic retry system
+Traceable execution per URL
+Separation: ingestion / execution / extraction / persistence
+E2E extensibility preserved
 
-# Update snapshots
-npx playwright test --update-snapshots
-```
+⚠️ Known Constraints
+Heavy Playwright workload (CPU-bound)
+Network-bound crawling at scale
+Requires tuning for large batches (7000+ URLs)
 
-### Suggested `package.json` scripts
+🚀 Future Roadmap
+Redis/BullMQ distributed queue
+Persistent job recovery (resume crawling)
+Adaptive concurrency tuning
+Proxy rotation layer
+Full E2E regression suite expansion
 
-```json
-{
-  "scripts": {
-    "test": "playwright test",
-    "test:smoke": "playwright test --grep @smoke",
-    "test:e2e": "playwright test tests/e2e",
-    "test:api": "playwright test tests/api",
-    "test:headed": "playwright test --headed",
-    "test:debug": "PWDEBUG=1 playwright test",
-    "test:ui": "playwright test --ui",
-    "report": "playwright show-report",
-    "allure:generate": "allure generate ./reports/allure-results -o ./reports/allure-report --clean",
-    "allure:open": "allure open ./reports/allure-report",
-    "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"**/*.{ts,json,md}\"",
-    "typecheck": "tsc --noEmit"
-  }
-}
-```
+📌 Summary
 
----
+This project is:
 
-## Reports
-
-### Playwright HTML report
-
-```bash
-npm run report
-```
-
-### Allure report
-
-```bash
-npm run allure:generate
-npm run allure:open
-```
-
-Traces, screenshots, and videos are automatically attached on failure (`reports/` directory, gitignored).
-
----
-
-## Writing Tests
-
-Tests live under `tests/` and use Playwright's test runner with custom fixtures.
-
-```ts
-import { test, expect } from '../src/fixtures/baseFixture';
-
-test.describe('Search @smoke', () => {
-  test('user can search for a product by keyword', async ({
-    homePage,
-    searchResultsPage,
-  }) => {
-    await homePage.open();
-    await homePage.search('iPhone 15');
-
-    await expect(searchResultsPage.results).not.toHaveCount(0);
-    await expect(searchResultsPage.firstResultTitle).toContainText(
-      /iPhone 15/i,
-    );
-  });
-});
-```
-
-### Tags
-
-Use grep tags to slice the suite: `@smoke`, `@regression`, `@critical`, `@api`.
-
-```bash
-npx playwright test --grep "@smoke|@critical"
-```
-
----
-
-## Page Object Model
-
-Each page extends `BasePage` and exposes locators + business actions — **no assertions inside POMs**.
-
-```ts
-// src/pages/HomePage.ts
-import { Page, Locator } from '@playwright/test';
-import { BasePage } from './BasePage';
-
-export class HomePage extends BasePage {
-  readonly searchInput: Locator;
-  readonly searchButton: Locator;
-
-  constructor(page: Page) {
-    super(page);
-    this.searchInput = page.getByRole('searchbox', { name: /пошук/i });
-    this.searchButton = page.getByRole('button', { name: /знайти/i });
-  }
-
-  async open(): Promise<void> {
-    await this.page.goto('/');
-  }
-
-  async search(query: string): Promise<void> {
-    await this.searchInput.fill(query);
-    await this.searchButton.click();
-  }
-}
-```
-
----
-
-## Test Data
-
-- Static data — JSON files under `data/`
-- Generated data — [`@faker-js/faker`](https://fakerjs.dev/)
-- Sensitive data — `.env` only (never committed)
-
-```ts
-import { faker } from '@faker-js/faker';
-
-const user = {
-  email: faker.internet.email(),
-  password: faker.internet.password({ length: 12 }),
-};
-```
-
----
-
-## CI/CD
-
-Sample GitHub Actions workflow (`.github/workflows/playwright.yml`):
-
-```yaml
-name: Playwright Tests
-on:
-  push:
-    branches: [main]
-  pull_request:
-  schedule:
-    - cron: '0 2 * * *' # nightly regression
-
-jobs:
-  test:
-    timeout-minutes: 30
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-      - run: npm ci
-      - run: npx playwright install --with-deps
-      - run: npm run lint
-      - run: npm test
-        env:
-          BASE_URL: ${{ vars.BASE_URL }}
-          USER_EMAIL: ${{ secrets.USER_EMAIL }}
-          USER_PASSWORD: ${{ secrets.USER_PASSWORD }}
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14
-```
-
----
-
-## Code Quality
-
-- **ESLint** — `npm run lint`
-- **Prettier** — `npm run format`
-- **TypeScript** strict mode — `npm run typecheck`
-- **Husky** runs `lint-staged` on every commit
-
----
-
-## Troubleshooting
-
-| Issue                                          | Fix                                                       |
-| ---------------------------------------------- | --------------------------------------------------------- |
-| `browserType.launch: Executable doesn't exist` | `npx playwright install --with-deps`                      |
-| Flaky timeouts                                 | Increase `DEFAULT_TIMEOUT` in `.env` or use `expect.poll` |
-| Cannot reach bestprice.com.ua                  | Check VPN / regional access; site may geo-block requests  |
-| Allure command not found                       | `npm i -D allure-commandline` or install Allure globally  |
-
----
-
-## License
-
-MIT — see [LICENSE](./LICENSE).
-
-## Maintainers
-
-QA Automation Team — open an issue or ping in the team chat.
+A hybrid Playwright automation system combining crawling, extraction, and E2E-ready architecture.

@@ -1,12 +1,11 @@
 import axios from 'axios';
 import * as xml2js from 'xml2js';
-import { BASE_URL } from '../../config/env';
+
+import { AppConfig } from '../../config/appConfig';
 
 /**
  * INGESTION LAYER
- *
- * Responsible for fetching raw URLs from sitemap source.
- * This is the first stage of the pipeline.
+ * Fetches URLs from sitemap source.
  */
 
 export type SitemapItem = {
@@ -14,8 +13,10 @@ export type SitemapItem = {
   id: string | null;
 };
 
-export async function getSitemapUrls(): Promise<SitemapItem[]> {
-  const sitemapUrl = `${BASE_URL}/sitemap.xml`;
+export async function getSitemapUrls(
+  config: AppConfig,
+): Promise<SitemapItem[]> {
+  const sitemapUrl = `${config.baseUrl}/sitemap.xml`;
 
   console.log('[SITEMAP]', sitemapUrl);
 

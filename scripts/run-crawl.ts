@@ -1,19 +1,48 @@
-import { getSitemapUrls } from '../crawler/utils/sitemap';
-import { isProductPage } from '../crawler/utils/filter';
-import { runEngine } from '../crawler/engine';
+import fs from 'fs';
 
-console.log('[ENTRY] start');
+import { getSitemapUrls } from '../crawler/ingestion/sitemapFetcher';
+import { isProductPage } from '../crawler/ingestion/urlFilter';
+import { runConcurrentEngine } from '../crawler/engine/concurrentEngine';
+import { selectUrls } from '../crawler/engine/selectUrls';
 
-async function main() {
-  const all = await getSitemapUrls();
+import { getExecutionConfig } from '../config/executionConfig';
+import { getAppConfig } from '../config/appConfig';
+import { RESULTS_PATH } from '../config/path';
 
-  const products = all.filter(isProductPage);
+async function main(): Promise<void> {
+  console.log('[ENTRY] crawler started');
 
-  console.log('[PRODUCT URLS]', products.length);
+  fs.writeFileSync(RESULTS_PATH, '', 'utf-8');
 
-  const results = await runEngine(products.slice(0, 100));
+  const runtime = getExecutionConfig();
+  const app = getAppConfig();
 
-  console.log('[FINAL RESULTS]', results);
+  console.log('[CONFIG]', { ...runtime, baseUrl: app.baseUrl });
+
+  const allUrls = await getSitemapUrls(app);
+  const productUrls = allUrls.filter(isProductPage);
+  const urlsToProcess = selectUrls(productUrls, runtime);
+
+  console.log('[INGESTION]', {
+    total: allUrls.length,
+    product: productUrls.length,
+    selected: urlsToProcess.length,
+  });
+
+  await runConcurrentEngine({
+    urls: urlsToProcess,
+    concurrency: runtime.concurrency,
+  });
+
+  console.log('[DONE]');
 }
 
-main();
+(async () => {
+  try {
+    await main();
+    process.exit(0);
+  } catch (err) {
+    console.error(err);
+    process.exit(1);
+  }
+})();

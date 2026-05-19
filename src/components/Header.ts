@@ -29,10 +29,15 @@ export class Header {
     this.page = page;
     this.root = page.getByRole('banner');
 
-    const topBar = this.root.locator('div').filter({ hasText: 'Пн-Пт' }).first();
+    const topBar = this.root
+      .locator('div')
+      .filter({ hasText: 'Пн-Пт' })
+      .first();
     this.phoneLink = topBar.locator('a[href^="tel:"]');
     this.workingHours = topBar.getByText('Пн-Пт 9:00-18:00');
-    this.topBarAuthLink = topBar.getByRole('link', { name: /^(Увійти|Кабінет)$/ });
+    this.topBarAuthLink = topBar.getByRole('link', {
+      name: /^(Увійти|Кабінет)$/,
+    });
 
     this.logoLink = this.root.locator('a[href="/"]');
     this.catalogButton = this.root.getByRole('button', { name: 'Каталог' });
@@ -48,11 +53,21 @@ export class Header {
     this.favoritesLink = this.root.getByRole('link', { name: 'Обране' });
     this.cartButton = this.root.getByRole('button', { name: 'Кошик' });
 
-    this.openMobileMenuButton = this.root.getByRole('button', { name: 'Відкрити меню' });
-    this.mobileMenu = this.root.getByRole('dialog', { name: 'Навігаційне меню' });
-    this.closeMobileMenuButton = this.mobileMenu.getByRole('button', { name: 'Закрити меню' });
-    this.mobileMenuNav = this.mobileMenu.getByRole('navigation', { name: 'Основна навігація' });
-    this.mobileLoginLink = this.mobileMenu.getByRole('link', { name: 'Увійти' });
+    this.openMobileMenuButton = this.root.getByRole('button', {
+      name: 'Відкрити меню',
+    });
+    this.mobileMenu = this.root.getByRole('dialog', {
+      name: 'Навігаційне меню',
+    });
+    this.closeMobileMenuButton = this.mobileMenu.getByRole('button', {
+      name: 'Закрити меню',
+    });
+    this.mobileMenuNav = this.mobileMenu.getByRole('navigation', {
+      name: 'Основна навігація',
+    });
+    this.mobileLoginLink = this.mobileMenu.getByRole('link', {
+      name: 'Увійти',
+    });
     this.mobileCartLink = this.mobileMenu.getByRole('link', { name: 'Кошик' });
   }
 

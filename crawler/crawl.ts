@@ -1,123 +1,169 @@
 import { Page } from 'playwright';
 
-type TraceEvent = {
-  step: string;
-  status: 'INFO' | 'OK' | 'WARN' | 'ERROR';
-  message?: string;
-  data?: any;
-  ts: number;
-};
+import { productExtractor } from './extractors/productExtractor';
+import { validator } from './validation/validator';
+import { retry } from './retry/retry';
+import { takeScreenshot } from './utils/screenshot';
+import { createLogger } from './utils/logger';
+import { classifyTrace } from './observability/traceClassifier';
+import { waitForCartReady } from './utils/cartReady';
+import { CrawlResult, TraceEvent } from './types/CrawlResult';
 
-function normalizePrice(text: string | null): number | null {
-  if (!text) return null;
-
-  const cleaned = text
-    .replace(/\u00A0/g, ' ') // NBSP fix
-    .replace(/[^\d]/g, '');
-
-  const num = Number(cleaned);
-
-  if (!Number.isFinite(num)) return null;
-
-  return num;
-}
-
-export async function crawl(page: Page, url: string) {
-  console.log('\n[CRAWL START]', url);
-
+/**
+ * CRAWL ORCHESTRATOR
+ */
+export async function crawl(
+  page: Page,
+  url: string,
+): Promise<CrawlResult> {
   const trace: TraceEvent[] = [];
+  const logger = createLogger(trace);
 
-  const add = (step: string, status: TraceEvent['status'], message?: string, data?: any) => {
-    trace.push({ step, status, message, data, ts: Date.now() });
-  };
-
-  let loaded = false;
-
-  for (let i = 1; i <= 3; i++) {
-    try {
-      console.log(`[GOTO ${i}]`, url);
-
-      const res = await page.goto(url, {
-        waitUntil: 'domcontentloaded',
-        timeout: 45000,
-      });
-
-      if (!res?.ok()) throw new Error('bad response');
-
-      await page.waitForTimeout(1500);
-
-      loaded = true;
-      add('goto', 'OK');
-      break;
-    } catch (e: any) {
-      add('goto', 'WARN', e.message);
-    }
-  }
-
-  if (!loaded) {
-    return { url, status: 'ERROR', reason: 'NAV_FAIL', trace };
-  }
-
-  const priceLocators = [
-    'span.text-2xl.font-bold',
-    '.product-price__big',
-    'span:has-text("₴")',
-  ];
-
-  let pdpPrice: number | null = null;
-
-  for (const sel of priceLocators) {
-    const count = await page.locator(sel).count();
-    if (count > 0) {
-      const txt = await page.locator(sel).first().textContent();
-      pdpPrice = normalizePrice(txt);
-      add('pdp', 'OK', txt ?? '');
-      break;
-    }
-  }
-
-  const addBtn = page.locator('button').filter({
-    hasText: /кошик|додати|купити/i,
+  logger.log({
+    step: 'start',
+    status: 'INFO',
+    message: url,
   });
 
-  let addOk = false;
+  // ---------------- NAVIGATION----------------
 
   try {
-    await addBtn.first().click({ timeout: 8000 });
-    addOk = true;
-    add('cart.click', 'OK');
+    await retry(
+      () =>
+        page.goto(url, {
+          waitUntil: 'domcontentloaded',
+          timeout: 45000,
+        }),
+      {
+        retries: 1,
+        delay: 500,
+      },
+    );
+
+    logger.log({
+      step: 'navigation',
+      status: 'OK',
+    });
   } catch (e: any) {
-    add('cart.click', 'ERROR', e.message);
+    const shot = await takeScreenshot(page, 'navigation-failed');
+
+    logger.log({
+      step: 'navigation',
+      status: 'ERROR',
+      message: e.message,
+      data: { screenshot: shot },
+    });
+
+    return {
+      url,
+      pdpPrice: null,
+      cartPrice: null,
+      match: false,
+      status: 'FAIL',
+      reason: 'NAVIGATION_FAILED',
+      trace,
+    };
   }
 
-  let cartPrice: number | null = null;
+  // ---------------- PDP ----------------
 
-  if (addOk) {
-    const cartPriceLocator = page
-      .locator('span, div')
-      .filter({
-        hasText: /^\s*\d[\d\s\u00A0]*₴\s*$/
-      });
+  const pdpPrice = await productExtractor.extractPdpPrice(page);
 
-    const cartCandidates = await cartPriceLocator.allTextContents();
+  logger.log({
+    step: 'pdp.extract',
+    status: pdpPrice != null ? 'OK' : 'ERROR',
+    data: pdpPrice,
+  });
 
-    const cartText =
-      cartCandidates
-        .map(t => t.trim())
-        .find(t => /^\d[\d\s\u00A0]*₴$/.test(t)) ?? null;
-
-    cartPrice = normalizePrice(cartText);
-
-    add('cart', 'OK', cartText ?? '');
+  // FAIL
+  if (pdpPrice == null) {
+    return {
+      url,
+      pdpPrice: null,
+      cartPrice: null,
+      match: false,
+      status: 'FAIL',
+      reason: 'PDP_NOT_FOUND',
+      trace,
+    };
   }
+
+  // ---------------- CART ----------------
+
+  let addToCartSuccess = false;
+
+  try {
+    addToCartSuccess = await retry(
+      () => productExtractor.clickAddToCart(page),
+      { retries: 2, delay: 500 },
+    );
+
+    logger.log({
+      step: 'cart.click',
+      status: addToCartSuccess ? 'OK' : 'ERROR',
+    });
+
+    if (!addToCartSuccess) {
+      throw new Error('Add to cart failed');
+    }
+
+    await waitForCartReady(page);
+  } catch (e: any) {
+    const shot = await takeScreenshot(page, 'cart-not-ready');
+
+    logger.log({
+      step: 'cart.wait',
+      status: 'ERROR',
+      message: e.message,
+      data: { screenshot: shot },
+    });
+
+    return {
+      url,
+      pdpPrice,
+      cartPrice: null,
+      match: false,
+      status: 'FAIL',
+      reason: 'CART_NOT_READY',
+      trace,
+    };
+  }
+
+  // ---------------- CART EXTRACT ----------------
+
+  const cartPrice = await productExtractor.extractCartPrice(page);
+
+  logger.log({
+    step: 'cart.extract',
+    status: cartPrice != null ? 'OK' : 'ERROR',
+    data: cartPrice,
+  });
+
+  // ---------------- VALIDATION ----------------
+
+  const validation = validator.validate({
+    url,
+    pdpPrice,
+    cartPrice,
+    addToCartSuccess,
+  });
+
+  logger.log({
+    step: 'validation',
+    status: validation.status === 'OK' ? 'OK' : 'ERROR',
+    message: validation.reason,
+    bucket: classifyTrace(validation.reason),
+  });
+
+  // ---------------- FINAL RESULT ----------------
 
   return {
     url,
-    status: addOk ? 'OK' : 'ERROR',
     pdpPrice,
     cartPrice,
-    priceMatch: pdpPrice === cartPrice,
-    addToCartSuccess: addOk,
+    match: validation.match,
+    status: validation.status,
+    reason: validation.reason,
     trace,
   };
 }

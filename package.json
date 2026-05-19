@@ -2,27 +2,39 @@
   "name": "bestprice",
   "version": "1.0.0",
   "description": "End-to-end test automation framework for bestprice.com.ua built with TypeScript and Playwright.",
-  "main": "index.js",
   "scripts": {
-    "crawl": "tsx scripts/run-crawl.ts",
+    "crawl:stage": "dotenv -e .env.stage -- tsx scripts/run-crawl.ts",
+    "crawl:prod": "dotenv -e .env.prod -- tsx scripts/run-crawl.ts",
+
+    "crawl:stage:sample": "EXECUTION_MODE=sample dotenv -e .env.stage -- tsx scripts/run-crawl.ts",
+    "crawl:prod:sample": "EXECUTION_MODE=sample dotenv -e .env.prod -- tsx scripts/run-crawl.ts",
+
+    "crawl:stage:full": "EXECUTION_MODE=full dotenv -e .env.stage -- tsx scripts/run-crawl.ts",
+    "crawl:prod:full": "EXECUTION_MODE=full dotenv -e .env.prod -- tsx scripts/run-crawl.ts",
+
     "dashboard": "tsx dashboard/server.ts",
-    "test:prices": "playwright test tests/price-mismatch.spec.ts"
+    "format": "prettier . --write",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:header": "playwright test",
+    "test:all": "npm run test && npm run test:e2e"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@playwright/test": "^1.59.1",
-    "@types/node": "^25.6.0",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.21.0"
+    "@types/node": "^25.7.0",
+    "dotenv-cli": "^11.0.0",
+    "prettier": "^3.8.3",
+    "tsx": "^4.21.0",
+    "vitest": "^1.6.0"
   },
   "dependencies": {
-    "async-mutex": "^0.5.0",
     "axios": "^1.16.0",
-    "cheerio": "^1.2.0",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "p-limit": "^7.3.0",
     "typescript": "^6.0.3",
     "xml2js": "^0.6.2"
   }

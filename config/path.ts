@@ -20,3 +20,5 @@ export const SITEMAP_FAILURES_PATH = path.resolve(
   DATA_DIR,
   'sitemap-failures.json',
 );
+
+export const RUNS_DIR = path.resolve(DATA_DIR, 'runs');

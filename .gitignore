@@ -9,6 +9,7 @@ playwright/.cache/
 .DS_Store
 .idea/
 data/screenshots/
+data/runs/
 data/results.ndjson
 data/results.json
 data/*.log

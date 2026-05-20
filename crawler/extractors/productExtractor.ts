@@ -1,84 +1,143 @@
-import { Page } from 'playwright';
+import { Locator, Page } from 'playwright';
 
 import { SELECTORS } from '../selectors/selectors';
 import { parsePriceNumber } from '../utils/parsePrice';
+import type { AddToCartExtraction, PriceExtraction } from '../types/extraction';
+
+async function firstMatchingSelector(
+  page: Page,
+  selectors: string[],
+  scope?: Locator,
+): Promise<{ selector: string; found: boolean }> {
+  const root: Page | Locator = scope ?? page;
+
+  for (const selector of selectors) {
+    const count = await root.locator(selector).count().catch(() => 0);
+    if (count > 0) {
+      return { selector, found: true };
+    }
+  }
+
+  return { selector: selectors[0] ?? 'unknown', found: false };
+}
 
 export const productExtractor = {
-  async extractPdpPrice(page: Page): Promise<number | null> {
+  async extractPdpPrice(page: Page): Promise<PriceExtraction> {
     const root = page.locator(SELECTORS.pdp.root);
+    const hasRoot = (await root.count()) > 0;
+    const scope: Locator | undefined = hasRoot ? root : undefined;
 
-    for (const selector of SELECTORS.pdp.price) {
-      try {
-        const el = root.locator(selector).first();
-        if ((await el.count()) === 0) continue;
+    let { selector, found } = await firstMatchingSelector(
+      page,
+      SELECTORS.pdp.price,
+      scope,
+    );
 
-        const text = await el.textContent();
-        const price = parsePriceNumber(text);
+    let priceScope: Page | Locator | undefined = scope;
 
-        if (price !== null) {
-          return price;
-        }
-      } catch {
-        continue;
+    // Fall back to page-level search if the price isn't inside the PDP root
+    // container — guards against DOM moves that hoist the price out of root.
+    if (!found && scope) {
+      const fallback = await firstMatchingSelector(page, SELECTORS.pdp.price);
+      if (fallback.found) {
+        selector = fallback.selector;
+        found = true;
+        priceScope = undefined;
       }
     }
 
-    for (const selector of SELECTORS.pdp.price) {
-      try {
-        const el = page.locator(selector).first();
-        if ((await el.count()) === 0) continue;
-
-        const text = await el.textContent();
-        const price = parsePriceNumber(text);
-
-        if (price !== null) {
-          return price;
-        }
-      } catch {
-        continue;
-      }
+    if (!found) {
+      return { selector, selectorFound: false, price: null };
     }
 
-    return null;
+    const priceLoc = priceScope
+      ? priceScope.locator(selector).first()
+      : page.locator(selector).first();
+    const text = await priceLoc.textContent();
+    return {
+      selector,
+      selectorFound: true,
+      price: parsePriceNumber(text),
+    };
   },
 
-  async clickAddToCart(page: Page): Promise<boolean> {
-    const buttons = [
-      page.locator(SELECTORS.actions.addToCartButton).first(),
-      page.locator(SELECTORS.actions.stickyAddToCart).first(),
+  async extractAddToCart(page: Page): Promise<AddToCartExtraction> {
+    const candidates = [
+      SELECTORS.actions.addToCartButton,
+      SELECTORS.actions.stickyAddToCart,
     ];
 
-    for (const btn of buttons) {
-      try {
-        if ((await btn.count()) === 0) continue;
-        if (!(await btn.isVisible().catch(() => false))) continue;
+    const { selector, found } = await firstMatchingSelector(page, candidates);
 
-        await btn.scrollIntoViewIfNeeded();
-        await page.waitForTimeout(200);
-
-        await btn.click({ timeout: 10_000, force: true });
-
-        return true;
-      } catch {
-        continue;
-      }
+    if (!found) {
+      return { selector, selectorFound: false, clicked: false };
     }
 
-    return false;
+    const btn = page.locator(selector).first();
+
+    try {
+      if (!(await btn.isVisible().catch(() => false))) {
+        return { selector, selectorFound: true, clicked: false };
+      }
+
+      await btn.scrollIntoViewIfNeeded();
+      await btn.click({ timeout: 10_000, force: true });
+
+      // The PDP can render and accept clicks before React hydrates the
+      // add-to-cart handler — the click then fires no PUT and the cart
+      // stays empty (observed ~40% locally on cold IPs). Confirm the click
+      // actually triggered the SPA by waiting briefly for cart-item to
+      // attach to the DOM. If it never does, surface clicked=false so the
+      // outer retry can re-attempt rather than burn the full waitForCartReady
+      // 20 s budget.
+      const triggered = await page
+        .waitForSelector(SELECTORS.cart.item, {
+          state: 'attached',
+          timeout: 3_000,
+        })
+        .then(() => true)
+        .catch(() => false);
+
+      return { selector, selectorFound: true, clicked: triggered };
+    } catch {
+      return { selector, selectorFound: true, clicked: false };
+    }
   },
 
-  async extractCartPrice(page: Page): Promise<number | null> {
-    try {
-      const el = page
-        .locator(SELECTORS.cart.item)
-        .first()
-        .locator(SELECTORS.cart.price[0])
-        .first();
+  async extractCartPrice(page: Page): Promise<PriceExtraction> {
+    const itemSelector = SELECTORS.cart.item;
+    const itemCount = await page.locator(itemSelector).count().catch(() => 0);
 
-      const text = await el.textContent({ timeout: 5_000 });
-      return parsePriceNumber(text);
-    } catch {
-      return null;
+    if (itemCount === 0) {
+      return {
+        selector: itemSelector,
+        selectorFound: false,
+        price: null,
+      };
     }
+
+    const priceSelector = SELECTORS.cart.price[0];
+    const priceLoc = page
+      .locator(itemSelector)
+      .first()
+      .locator(priceSelector)
+      .first();
+
+    const priceCount = await priceLoc.count().catch(() => 0);
+
+    if (priceCount === 0) {
+      return {
+        selector: priceSelector,
+        selectorFound: false,
+        price: null,
+      };
+    }
+
+    const text = await priceLoc.textContent({ timeout: 5_000 }).catch(() => null);
+    return {
+      selector: priceSelector,
+      selectorFound: true,
+      price: parsePriceNumber(text),
+    };
   },
 };

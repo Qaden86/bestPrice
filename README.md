@@ -1,59 +1,310 @@
-# BestPrice UA
+# BestPrice UA — Crawler & E2E Automation
 
-Playwright-based price crawler and UI tests for [bestprice.com.ua](https://bestprice.com.ua).
+End-to-end pipeline for [bestprice.com.ua](https://bestprice.com.ua):
 
-## Pipeline
+- **Crawler** — concurrent product-page crawler that extracts PDP/cart prices, validates parity, and streams results to a dashboard.
+- **UI tests** — Playwright + Page Object Model for the storefront.
+- **Unit & integration tests** — Vitest for parsing, validation, retry, and extractors.
 
 ```
-Sitemap → URL filter → concurrent workers → crawl → result store → dashboard
+sitemap → URL filter → concurrent workers (browser pool) → crawl + validate → result store → dashboard (SSE)
 ```
 
-## Scripts
+---
+
+## Table of Contents
+
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running the Crawler](#running-the-crawler)
+- [Dashboard](#dashboard)
+- [Running Tests](#running-tests)
+- [Page Object Model](#page-object-model)
+- [CI/CD](#cicd)
+- [Code Quality](#code-quality)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Tech Stack
+
+| Tool | Purpose |
+|------|---------|
+| **Node.js (>=18 / lts/\*)** | Runtime |
+| **TypeScript** | Static typing |
+| **Playwright** | Browser automation (crawl + UI tests) |
+| **Vitest** | Unit & integration tests |
+| **Express** | Dashboard HTTP/SSE server |
+| **Cheerio + xml2js** | Sitemap & JSON-LD parsing |
+| **Axios** | HTTP fetch |
+| **p-limit** | Concurrency primitives |
+| **dotenv / dotenv-cli** | Environment management |
+| **Prettier** | Formatting |
+| **GitHub Actions** | CI |
+
+---
+
+## Project Structure
+
+```
+bestPrice/
+├── config/
+│   ├── appConfig.ts            # baseUrl, sitemap discovery
+│   ├── executionConfig.ts      # env / mode / concurrency / screenshots
+│   └── path.ts                 # DATA_DIR, RUNS_DIR, RESULTS_PATH
+├── crawler/
+│   ├── browser/browserPool.ts  # Reusable Playwright browser pool
+│   ├── engine/
+│   │   ├── concurrentEngine.ts # Worker loop + URL-level retry
+│   │   ├── selectUrls.ts       # Sample / full mode URL selection
+│   │   └── shutdown.ts         # SIGINT/SIGTERM cooperative shutdown
+│   ├── extractors/             # PDP / JSON-LD / cart extractors
+│   ├── ingestion/              # Sitemap fetcher + URL filter
+│   ├── observability/          # Trace classifier (buckets)
+│   ├── output/
+│   │   ├── resultStore.ts      # NDJSON writer + EventEmitter (SSE)
+│   │   ├── readNdjson.ts
+│   │   └── runArchive.ts       # Per-run history under data/runs/
+│   ├── retry/retry.ts          # Generic retry utility
+│   ├── selectors/selectors.ts
+│   ├── sitemap/                # Standalone sitemap price-check pipeline
+│   ├── types/CrawlResult.ts    # CrawlStatus, CrawlReason, TraceEvent, TraceBucket
+│   ├── utils/                  # parsePrice, screenshot, cartReady, logger
+│   ├── validation/validator.ts
+│   ├── workers/crawlWorker.ts
+│   └── crawl.ts                # Per-URL crawl function
+├── dashboard/
+│   ├── server.ts               # /api/results /api/stats /api/runs /api/results-stream
+│   └── loadResults.ts
+├── dashboard-ui/
+│   ├── index.html
+│   ├── app.js
+│   └── styles.css
+├── scripts/
+│   ├── run-crawl.ts            # Crawler entrypoint
+│   ├── check-sitemap-prices.ts # Sitemap-only price audit
+│   └── diagnose-product.ts     # Single-URL debug helper
+├── src/
+│   ├── components/Header.ts    # Header POM
+│   └── fixtures/index.ts       # Playwright test fixtures
+├── tests/
+│   ├── business/               # Cross-cutting business rules
+│   ├── e2e/                    # Playwright smoke (crawl + sitemap)
+│   ├── header/                 # Playwright UI tests (desktop + mobile)
+│   ├── integration/            # Vitest integration tests
+│   └── unit/                   # Vitest unit tests (extractors, retry, utils, validation)
+├── data/                       # Local results.ndjson + runs/<runId>/
+├── playwright.config.ts
+├── vitest.config.ts
+└── package.json
+```
+
+---
+
+## Prerequisites
+
+- Node.js **>= 18** (CI uses `lts/*`)
+- npm
+- Disk space for `data/runs/` (each archived run is a few MB on stage, more on full prod crawls)
+
+---
+
+## Installation
+
+```bash
+git clone git@github.com:Qaden86/bestPrice.git
+cd bestPrice
+npm ci
+npx playwright install --with-deps   # only needed for Playwright tests / live crawl
+```
+
+---
+
+## Configuration
+
+Copy `.env.example` and create `.env.stage` and/or `.env.prod`:
+
+```bash
+cp .env.example .env.stage
+cp .env.example .env.prod
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BASE_URL` | `https://bestprice.com.ua` | Site origin used by the crawler & Playwright tests |
+| `NODE_ENV` | `stage` | `stage` or `prod` (drives default concurrency) |
+| `EXECUTION_MODE` | `full` | `full` or `sample` |
+| `SAMPLE_SIZE` | `100` | URLs to crawl in sample mode |
+| `CRAWL_CONCURRENCY` | `3` (stage) / `5` (prod) | Worker count |
+| `CRAWL_SCREENSHOTS` | `true` (sample) / `false` (full) | Failure screenshots. Set `true`/`false` to override the default for the current mode. |
+| `CRAWL_SCREENSHOT_TIMEOUT_MS` | `8000` | Viewport-only screenshot timeout |
+| `CRAWL_SMOKE_STRICT` | `false` | If `true`, the E2E smoke spec asserts an OK result with matching cart price |
+
+Concurrency precedence: `CRAWL_CONCURRENCY` env var > environment default (`stage`/`prod`). See `config/executionConfig.ts`.
+
+---
+
+## Running the Crawler
 
 | Command | Description |
 |---------|-------------|
 | `npm run crawl:stage` | Crawl using `.env.stage` |
+| `npm run crawl:stage:sample` | Sample run on stage |
+| `npm run crawl:stage:full` | Full sitemap on stage |
 | `npm run crawl:prod` | Crawl using `.env.prod` |
-| `npm run crawl:stage:sample` | Sample run (see `EXECUTION_MODE`) |
-| `npm run crawl:stage:full` | Full sitemap (~6.8k URLs, screenshots off) |
-| `npm run crawl:prod:full` | Full prod crawl (`CRAWL_CONCURRENCY=10`, screenshots off) |
-| `npm run dashboard` | Results UI at http://localhost:3000 |
-| `npm test` | Vitest unit tests |
-| `npm run test:e2e` | Playwright tests |
+| `npm run crawl:prod:sample` | Sample run on prod |
+| `npm run crawl:prod:full` | Full prod crawl |
 
-## Environment
-
-Copy `.env.example` and create `.env.stage` / `.env.prod`:
-
-| Variable | Description |
-|----------|-------------|
-| `BASE_URL` | Site origin |
-| `NODE_ENV` | `stage` or `prod` (concurrency defaults) |
-| `EXECUTION_MODE` | `full` or `sample` |
-| `SAMPLE_SIZE` | URLs in sample mode (default `100`) |
-| `CRAWL_CONCURRENCY` | Worker count override |
-| `CRAWL_SCREENSHOTS` | `false` for long full runs (default off when `EXECUTION_MODE=full`) |
-
-### Full crawl (recommended)
+Override concurrency ad hoc:
 
 ```bash
-# Stage — same as npm run crawl:stage:full
-npm run crawl:stage:full
-
-# Prod — explicit overrides
+CRAWL_CONCURRENCY=8 npm run crawl:stage
 CRAWL_SCREENSHOTS=false CRAWL_CONCURRENCY=10 npm run crawl:prod:full
 ```
 
-Results stream to `data/results.ndjson`. Use `npm run dashboard` to inspect.
+Output:
 
-## Layout
+- Live stream → `data/results.ndjson`
+- Previous run is archived to `data/runs/<runId>/` (with `results.ndjson` + `manifest.json`) before each new run starts.
+- `Ctrl-C` triggers a cooperative shutdown — partial results stay on disk.
 
-- `scripts/run-crawl.ts` — crawl entrypoint
-- `crawler/` — ingestion, engine, extraction, validation
-- `dashboard/` — Express API + static UI
-- `tests/header/` — header UI tests (POM in `src/`)
-- `tests/e2e/` — crawl smoke test
+### URL-level retry
 
-## Troubleshooting full crawls
+The engine retries each URL up to **3 attempts** when it fails with a transient reason (`NAVIGATION_FAILED`, `CART_NOT_READY`, `CRAWL_FAILED`, `INTERNAL_ERROR`). Non-transient failures (`PRICE_MISMATCH`, `SELECTOR_NOT_FOUND`, `MISSING_PRICE`, `PRICE_IS_ZERO`, `ADD_TO_CART_FAILED`) are not retried — they reflect real product/page state. See `crawler/engine/concurrentEngine.ts`.
 
-If you see `[WORKER ERROR] ... page.screenshot: Timeout 30000ms exceeded`, the crawl is still advancing (`[PROGRESS]` keeps counting) but failure handling was spending 30s per URL on full-page PNGs. Use `CRAWL_SCREENSHOTS=false` (already set on `:full` npm scripts) or pull the latest `screenshot.ts` fix (viewport-only, non-fatal captures).
+### Sitemap-only price audit
+
+```bash
+npx tsx scripts/check-sitemap-prices.ts
+```
+
+Skips PDP rendering — uses sitemap + JSON-LD extraction only. Useful for fast price-presence checks.
+
+### Single URL diagnostics
+
+```bash
+npx tsx scripts/diagnose-product.ts <product-url>
+```
+
+---
+
+## Dashboard
+
+```bash
+npm run dashboard
+```
+
+Then open <http://localhost:3000>.
+
+Endpoints:
+
+| Path | Purpose |
+|------|---------|
+| `/api/results` | Current run rows |
+| `/api/stats` | Totals + success/fail rate + reason counts + **bucketDistribution** + **topFailingSteps** |
+| `/api/runs` | List of archived runs |
+| `/api/runs/:runId/results` | Rows for one archived run |
+| `/api/runs/:runId/stats` | Stats for one archived run |
+| `/api/runs/compare?a=&b=` | Diff between two runs (improved / regressed / stability delta / reason trends) |
+| `/api/results-stream` | Server-Sent Events stream of live updates |
+
+The UI surfaces:
+
+- TOTAL / SUCCESS RATE / FAIL RATE / CART FAIL RATE
+- **Top failing steps** (e.g. `pdp.extract`, `cart.click`)
+- **Trace bucket distribution** (`INFRA_FAILURE`, `DOM_DRIFT`, `BUSINESS_LOGIC_FAIL`, …)
+- Filtering by status / reason
+- Run selector & run comparison
+- Per-row trace inspector modal
+
+---
+
+## Running Tests
+
+| Command | What |
+|---------|------|
+| `npm test` | Vitest unit tests (`tests/unit/**`) |
+| `npm run test:integration` | Vitest integration tests (`tests/integration/**`) |
+| `npm run test:e2e` | All Playwright tests |
+| `npm run test:header` | Header UI tests (desktop + mobile) |
+| `npm run test:sitemap` | Sitemap E2E |
+| `npm run test:all` | Vitest + Playwright |
+
+The Playwright crawl smoke (`tests/e2e/crawl.smoke.spec.ts`) runs in **contract mode** by default — asserts the pipeline produces a navigable result with a PDP price and cart-click attempt, without requiring an OK status. Set `CRAWL_SMOKE_STRICT=true` to assert a full OK + matching cart price (use when the target product is known good).
+
+---
+
+## Page Object Model
+
+UI tests use Playwright fixtures + a single Header component (`src/components/Header.ts`).
+
+Pattern:
+
+1. **Component** — `src/components/Header.ts` exposes locators (`searchInput`, `cartButton`, etc.) and high-level actions (`submitSearch`, `openMobileMenu`).
+2. **Fixture** — `src/fixtures/index.ts` extends Playwright's `test` to inject a ready-to-use `header` instance:
+
+   ```ts
+   import { test, expect } from '../../src/fixtures';
+
+   test('search submits to /poshuk', async ({ header, page }) => {
+     await header.submitSearch('генератор');
+     await expect(page).toHaveURL(/\/poshuk/);
+   });
+   ```
+
+3. **Spec** — `tests/header/header.spec.ts` covers desktop and mobile (via `test.use({ viewport, isMobile, hasTouch })`).
+
+Adding a new page object:
+
+- Drop a new class under `src/components/` (or introduce `src/pages/` if you need full-page POMs).
+- Add a fixture entry in `src/fixtures/index.ts`.
+- Write specs in `tests/<feature>/<feature>.spec.ts`.
+
+---
+
+## CI/CD
+
+GitHub Actions workflow: `.github/workflows/playwright.yml`. Three parallel jobs on push/PR to `main`:
+
+- **unit-tests** — `npm run test` (Vitest)
+- **crawler-tests** — `npx playwright test tests/e2e/crawl.smoke.spec.ts` (contract mode — hits live site)
+- **ui-tests** — `npx playwright test header`
+
+Use `CRAWL_SMOKE_STRICT=true` locally before promoting to be sure the strict-success path still works against the target product.
+
+---
+
+## Code Quality
+
+- `npm run typecheck` — strict TypeScript (`tsc --noEmit`)
+- `npm run format` — Prettier across the repo
+
+There is no ESLint config checked in yet; Prettier is the source of truth for formatting.
+
+---
+
+## Troubleshooting
+
+### `page.screenshot: Timeout 30000ms exceeded` during a full crawl
+
+The crawl is still progressing (`[PROGRESS]` keeps counting) but failure handling was spending 30s per URL on full-page PNGs. Use `CRAWL_SCREENSHOTS=false` (already set on `:full` scripts) or rely on the viewport-only, non-fatal screenshot path in `crawler/utils/screenshot.ts`.
+
+### A URL keeps failing as `NAVIGATION_FAILED`
+
+The engine retries transient failures up to 3 times — if it still fails, the site is likely throttling. Lower `CRAWL_CONCURRENCY` and check `data/results.ndjson` for the per-attempt trace.
+
+### Dashboard shows no data
+
+- Make sure a crawl has produced `data/results.ndjson`.
+- Or pick a past run from the **Run** selector — archived runs live under `data/runs/`.
+
+### `cartFailureRate` looks wrong
+
+It counts both `ADD_TO_CART_FAILED` rows and rows missing a `cartPrice`. If you want only the explicit fails, filter by reason `ADD_TO_CART_FAILED` in the table.
+
+### Ctrl-C left a half-written `results.ndjson`
+
+That's expected — partial results are kept on disk; the run is marked interrupted and won't be archived. Re-run when you're ready.

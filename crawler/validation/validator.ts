@@ -1,5 +1,6 @@
 import type { AddToCartExtraction, PriceExtraction } from '../types/extraction';
 import { parsePrice } from '../utils/parsePrice';
+import { pricesMatch } from '../utils/priceCompare';
 
 export type ValidationInput = {
   url: string;
@@ -103,7 +104,9 @@ function checkPrices(pdp: PriceExtraction, cart: PriceExtraction): ValidationFai
     return fail('PRICE_IS_ZERO');
   }
 
-  if (pdpValue !== cartValue) {
+  // Tolerant comparison handles VAT-inclusive cart prices (10% / 20% bands)
+  // and a small rounding allowance — see crawler/utils/priceCompare.ts.
+  if (!pricesMatch(pdpValue, cartValue)) {
     return fail('PRICE_MISMATCH');
   }
 

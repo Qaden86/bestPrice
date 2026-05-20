@@ -2,6 +2,22 @@ import { BrowserPool } from '../browser/browserPool';
 import { crawlWorker } from '../workers/crawlWorker';
 import { upsertResult, flushResults } from '../output/resultStore';
 import { isShuttingDown, requestShutdown } from './shutdown';
+import { CrawlReason, CrawlResult } from '../types/CrawlResult';
+
+const MAX_ATTEMPTS = 3;
+
+const RETRYABLE_REASONS: ReadonlySet<CrawlReason> = new Set<CrawlReason>([
+  'NAVIGATION_FAILED',
+  'CART_NOT_READY',
+  'CRAWL_FAILED',
+  'INTERNAL_ERROR',
+]);
+
+function isRetryable(result: CrawlResult): boolean {
+  if (result.status === 'OK') return false;
+  if (result.reason === 'SHUTDOWN') return false;
+  return RETRYABLE_REASONS.has(result.reason);
+}
 
 export async function runConcurrentEngine(params: {
   urls: (string | { url: string })[];
@@ -15,8 +31,13 @@ export async function runConcurrentEngine(params: {
   let cursor = 0;
   let completed = 0;
 
+  const retryQueue: string[] = [];
+  const attempts = new Map<string, number>();
+
   const getNext = (): string | null => {
-    if (isShuttingDown() || cursor >= urls.length) return null;
+    if (isShuttingDown()) return null;
+    if (retryQueue.length) return retryQueue.shift()!;
+    if (cursor >= urls.length) return null;
     return urls[cursor++];
   };
 
@@ -25,7 +46,22 @@ export async function runConcurrentEngine(params: {
       const url = getNext();
       if (!url) return;
 
+      const attempt = (attempts.get(url) ?? 0) + 1;
+      attempts.set(url, attempt);
+
       const result = await crawlWorker(url, pool);
+
+      const canRetry =
+        !isShuttingDown() && attempt < MAX_ATTEMPTS && isRetryable(result);
+
+      if (canRetry) {
+        console.log(
+          `[RETRY] ${url} (${attempt}/${MAX_ATTEMPTS}) reason=${result.reason}`,
+        );
+        retryQueue.push(url);
+        continue;
+      }
+
       upsertResult(result);
 
       completed++;

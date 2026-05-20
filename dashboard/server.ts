@@ -145,6 +145,7 @@ function normalizeRows(results: any[]) {
     cartPrice: r.cartPrice ?? null,
     match: !!r.match,
     screenshot: r.screenshot ?? null,
+    trace: Array.isArray(r.trace) ? r.trace : [],
   }));
 }
 
@@ -183,11 +184,30 @@ function statsFromRows(results: any[]) {
   const success = results.filter((r) => r.status === 'OK' && r.match).length;
   const failed = total - success;
   const reasons: Record<string, number> = {};
+  const bucketDistribution: Record<string, number> = {};
+  const failingStepCount: Record<string, number> = {};
 
   for (const r of results) {
     const key = r.reason ?? 'UNKNOWN';
     reasons[key] = (reasons[key] ?? 0) + 1;
+
+    const trace = Array.isArray(r.trace) ? r.trace : [];
+    for (const ev of trace) {
+      if (ev?.status !== 'ERROR') continue;
+
+      if (ev.step) {
+        failingStepCount[ev.step] = (failingStepCount[ev.step] ?? 0) + 1;
+      }
+      if (ev.bucket) {
+        bucketDistribution[ev.bucket] = (bucketDistribution[ev.bucket] ?? 0) + 1;
+      }
+    }
   }
+
+  const topFailingSteps = Object.entries(failingStepCount)
+    .map(([step, count]) => ({ step, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
 
   return {
     total,
@@ -196,5 +216,7 @@ function statsFromRows(results: any[]) {
     successRate: total ? success / total : 0,
     failureRate: total ? failed / total : 0,
     reasons,
+    bucketDistribution,
+    topFailingSteps,
   };
 }

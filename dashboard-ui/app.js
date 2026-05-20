@@ -224,6 +224,75 @@ function renderStatsFromRows() {
       </div>
     </div>
   `;
+
+  renderInsightsFromRows();
+}
+
+/**
+ * INSIGHTS — top failing steps + trace bucket distribution.
+ *
+ * Recovered from the deleted buildTraceInsights helper:
+ * counts trace events with status === 'ERROR', groups by step and bucket.
+ */
+function renderInsightsFromRows() {
+  const target = document.getElementById('insights');
+  if (!target) return;
+
+  const stepCount = {};
+  const bucketCount = {};
+
+  for (const r of ALL_ROWS) {
+    const trace = Array.isArray(r.trace) ? r.trace : [];
+    for (const ev of trace) {
+      if (ev?.status !== 'ERROR') continue;
+      if (ev.step) stepCount[ev.step] = (stepCount[ev.step] ?? 0) + 1;
+      if (ev.bucket) bucketCount[ev.bucket] = (bucketCount[ev.bucket] ?? 0) + 1;
+    }
+  }
+
+  const topSteps = Object.entries(stepCount)
+    .map(([step, count]) => ({ step, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  const buckets = Object.entries(bucketCount)
+    .map(([bucket, count]) => ({ bucket, count }))
+    .sort((a, b) => b.count - a.count);
+
+  if (!topSteps.length && !buckets.length) {
+    target.innerHTML = '';
+    return;
+  }
+
+  const stepsHtml = topSteps.length
+    ? topSteps
+        .map(
+          (s) =>
+            `<li><span class="insight-key">${s.step}</span><span class="insight-val">${s.count}</span></li>`,
+        )
+        .join('')
+    : '<li class="insight-empty">No failing steps</li>';
+
+  const bucketsHtml = buckets.length
+    ? buckets
+        .map(
+          (b) =>
+            `<li><span class="insight-key">${b.bucket}</span><span class="insight-val">${b.count}</span></li>`,
+        )
+        .join('')
+    : '<li class="insight-empty">No buckets</li>';
+
+  target.innerHTML = `
+    <div class="insight-card">
+      <div class="insight-title">TOP FAILING STEPS</div>
+      <ul class="insight-list">${stepsHtml}</ul>
+    </div>
+
+    <div class="insight-card">
+      <div class="insight-title">TRACE BUCKETS</div>
+      <ul class="insight-list">${bucketsHtml}</ul>
+    </div>
+  `;
 }
 
 /**
@@ -364,6 +433,7 @@ function renderTable(rows) {
           <div style="display:flex; gap:8px; align-items:center;">
             <button onclick="window.open('${url}', '_blank')">OPEN</button>
             <button onclick="navigator.clipboard.writeText('${url}')">COPY</button>
+            <button onclick="openTraceByUrl('${url}')">TRACE</button>
             ${r.screenshot ? `<a href="${screenshotHref(r.screenshot)}" target="_blank">PNG</a>` : ''}
           </div>
         </td>

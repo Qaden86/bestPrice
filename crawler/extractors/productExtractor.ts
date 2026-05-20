@@ -27,18 +27,31 @@ export const productExtractor = {
     const hasRoot = (await root.count()) > 0;
     const scope: Locator | undefined = hasRoot ? root : undefined;
 
-    const { selector, found } = await firstMatchingSelector(
+    let { selector, found } = await firstMatchingSelector(
       page,
       SELECTORS.pdp.price,
       scope,
     );
 
+    let priceScope: Page | Locator | undefined = scope;
+
+    // Fall back to page-level search if the price isn't inside the PDP root
+    // container — guards against DOM moves that hoist the price out of root.
+    if (!found && scope) {
+      const fallback = await firstMatchingSelector(page, SELECTORS.pdp.price);
+      if (fallback.found) {
+        selector = fallback.selector;
+        found = true;
+        priceScope = undefined;
+      }
+    }
+
     if (!found) {
       return { selector, selectorFound: false, price: null };
     }
 
-    const priceLoc = scope
-      ? scope.locator(selector).first()
+    const priceLoc = priceScope
+      ? priceScope.locator(selector).first()
       : page.locator(selector).first();
     const text = await priceLoc.textContent();
     return {

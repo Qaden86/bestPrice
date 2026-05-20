@@ -9,11 +9,6 @@ export const resultBus = new EventEmitter();
 const writeQueue: string[] = [];
 let drainActive = false;
 
-function compactForPersist(result: CrawlResult): Omit<CrawlResult, 'trace'> & { trace?: never } {
-  const { trace: _trace, ...rest } = result;
-  return rest;
-}
-
 async function drainQueue(): Promise<void> {
   if (drainActive) return;
   drainActive = true;
@@ -35,9 +30,8 @@ export function upsertResult(result: CrawlResult): void {
   const key = typeof result.url === 'string' ? result.url : (result.url as { url: string })?.url;
   if (!key) return;
 
-  const persisted = compactForPersist(result);
-  resultBus.emit('update', persisted);
-  writeQueue.push(JSON.stringify(persisted) + '\n');
+  resultBus.emit('update', result);
+  writeQueue.push(JSON.stringify(result) + '\n');
   void drainQueue();
 }
 

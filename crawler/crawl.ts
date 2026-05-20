@@ -127,7 +127,19 @@ export async function crawl(page: Page, url: string): Promise<CrawlResult> {
 
   // ---------------- CART ----------------
 
-  const addToCart = await productExtractor.extractAddToCart(page);
+  let addToCart = await productExtractor.extractAddToCart(page);
+
+  // Retry the click on a flaky button handler — only when the selector exists
+  // but the click itself failed. Skip if no selector at all (won't fix itself).
+  for (let attempt = 1; attempt <= 2 && !addToCart.clicked && addToCart.selectorFound; attempt++) {
+    logger.log({
+      step: 'retry',
+      status: 'INFO',
+      message: `add-to-cart attempt ${attempt + 1}/3`,
+    });
+    await page.waitForTimeout(500);
+    addToCart = await productExtractor.extractAddToCart(page);
+  }
 
   logger.log({
     step: 'cart.click',

@@ -89,15 +89,28 @@ function parseConcurrency(env: Environment): number {
   return 3; // stage
 }
 
-/** CRAWL_SCREENSHOTS=false to disable failure screenshots */
-function parseScreenshots(): boolean {
+/**
+ * Failure screenshots.
+ *
+ * Defaults:
+ *   - sample mode → ON (cheap, easier to debug while iterating)
+ *   - full mode   → OFF (full-page PNGs serialize behind cart-not-ready
+ *                  timeouts at high concurrency and balloon run time)
+ *
+ * Override via CRAWL_SCREENSHOTS=true|false.
+ */
+function parseScreenshots(mode: ExecutionMode): boolean {
   const raw = process.env.CRAWL_SCREENSHOTS?.toLowerCase();
 
   if (raw === 'false' || raw === '0' || raw === 'no') {
     return false;
   }
 
-  return true;
+  if (raw === 'true' || raw === '1' || raw === 'yes') {
+    return true;
+  }
+
+  return mode === 'sample';
 }
 
 /**
@@ -112,6 +125,6 @@ export function getExecutionConfig(): ExecutionConfig {
     mode,
     sampleSize: parseSampleSize(mode),
     concurrency: parseConcurrency(env),
-    screenshots: parseScreenshots(),
+    screenshots: parseScreenshots(mode),
   };
 }

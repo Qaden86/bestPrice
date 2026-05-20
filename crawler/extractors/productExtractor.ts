@@ -82,7 +82,23 @@ export const productExtractor = {
 
       await btn.scrollIntoViewIfNeeded();
       await btn.click({ timeout: 10_000, force: true });
-      return { selector, selectorFound: true, clicked: true };
+
+      // The PDP can render and accept clicks before React hydrates the
+      // add-to-cart handler — the click then fires no PUT and the cart
+      // stays empty (observed ~40% locally on cold IPs). Confirm the click
+      // actually triggered the SPA by waiting briefly for cart-item to
+      // attach to the DOM. If it never does, surface clicked=false so the
+      // outer retry can re-attempt rather than burn the full waitForCartReady
+      // 20 s budget.
+      const triggered = await page
+        .waitForSelector(SELECTORS.cart.item, {
+          state: 'attached',
+          timeout: 3_000,
+        })
+        .then(() => true)
+        .catch(() => false);
+
+      return { selector, selectorFound: true, clicked: triggered };
     } catch {
       return { selector, selectorFound: true, clicked: false };
     }

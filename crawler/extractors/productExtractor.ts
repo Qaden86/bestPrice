@@ -85,13 +85,13 @@ export const productExtractor = {
 
       // The PDP can render and accept clicks before React hydrates the
       // add-to-cart handler — the click then fires no PUT and the cart
-      // stays empty (observed ~40% locally on cold IPs). Confirm the click
-      // actually triggered the SPA by waiting briefly for cart-item to
-      // attach to the DOM. If it never does, surface clicked=false so the
-      // outer retry can re-attempt rather than burn the full waitForCartReady
-      // 20 s budget.
+      // stays empty. cart-item is a persistent slot that exists even
+      // when the cart is empty; only the line-total node renders for a
+      // real item, so it's the truthy signal that the click landed. On
+      // failure, surface clicked=false so the outer retry re-clicks
+      // instead of waiting out the full waitForCartReady budget.
       const triggered = await page
-        .waitForSelector(SELECTORS.cart.item, {
+        .waitForSelector(SELECTORS.cart.price[0], {
           state: 'attached',
           timeout: 3_000,
         })

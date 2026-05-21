@@ -104,8 +104,6 @@ function checkPrices(pdp: PriceExtraction, cart: PriceExtraction): ValidationFai
     return fail('PRICE_IS_ZERO');
   }
 
-  // Tolerant comparison handles VAT-inclusive cart prices (10% / 20% bands)
-  // and a small rounding allowance — see crawler/utils/priceCompare.ts.
   if (!pricesMatch(pdpValue, cartValue)) {
     return fail('PRICE_MISMATCH');
   }

@@ -10,6 +10,10 @@
 let ALL_ROWS = [];
 window.__ROWS_MAP = {};
 
+let CURRENT_PAGE = 1;
+let PAGE_SIZE = 25;
+let FILTERED_ROWS = [];
+
 /**
  * Normalize URL into strict string.
  * Prevents "object URL" bugs from backend.
@@ -168,7 +172,7 @@ function initStream() {
 
       renderStatsFromRows();
       renderReasonFilter();
-      applyFilters();
+      applyFilters(true);
     } catch (e) {
       console.warn('[STREAM PARSE ERROR]', e);
     }
@@ -298,7 +302,7 @@ function renderInsightsFromRows() {
 /**
  * FILTERS
  */
-function applyFilters() {
+function applyFilters(preservePage = false) {
   const search =
     document.getElementById('search')?.value?.toLowerCase() || '';
 
@@ -324,7 +328,96 @@ function applyFilters() {
     rows = rows.filter((r) => r.reason === reason);
   }
 
-  renderTable(rows);
+  FILTERED_ROWS = rows;
+  if (!preservePage) CURRENT_PAGE = 1;
+  renderPage();
+}
+
+function renderPage() {
+  const totalRows = FILTERED_ROWS.length;
+  const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+
+  if (CURRENT_PAGE > totalPages) CURRENT_PAGE = totalPages;
+  if (CURRENT_PAGE < 1) CURRENT_PAGE = 1;
+
+  const start = (CURRENT_PAGE - 1) * PAGE_SIZE;
+  const pageRows = FILTERED_ROWS.slice(start, start + PAGE_SIZE);
+
+  renderTable(pageRows);
+  renderPagination(totalRows, totalPages, start);
+}
+
+function renderPagination(totalRows, totalPages, start) {
+  const container = document.getElementById('pagination');
+  if (!container) return;
+
+  if (totalRows === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const end = Math.min(start + PAGE_SIZE, totalRows);
+
+  const pageButtons = buildPageButtons(CURRENT_PAGE, totalPages);
+  const atFirst = CURRENT_PAGE === 1;
+  const atLast = CURRENT_PAGE === totalPages;
+
+  container.innerHTML = `
+    <div class="pagination-info">
+      Showing ${start + 1}-${end} of ${totalRows}
+    </div>
+
+    <div class="pagination-controls">
+      <button onclick="gotoPage(1)" ${atFirst ? 'disabled' : ''}>«</button>
+      <button onclick="gotoPage(${CURRENT_PAGE - 1})" ${atFirst ? 'disabled' : ''}>‹</button>
+      ${pageButtons}
+      <button onclick="gotoPage(${CURRENT_PAGE + 1})" ${atLast ? 'disabled' : ''}>›</button>
+      <button onclick="gotoPage(${totalPages})" ${atLast ? 'disabled' : ''}>»</button>
+
+      <select class="pagination-size" onchange="changePageSize(this.value)">
+        ${[10, 25, 50, 100, 250].map(
+          (n) =>
+            `<option value="${n}" ${n === PAGE_SIZE ? 'selected' : ''}>${n} / page</option>`,
+        ).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function buildPageButtons(current, total) {
+  const pages = [];
+  const range = 2;
+
+  for (let i = 1; i <= total; i++) {
+    if (
+      i === 1 ||
+      i === total ||
+      (i >= current - range && i <= current + range)
+    ) {
+      pages.push(i);
+    } else if (pages[pages.length - 1] !== '...') {
+      pages.push('...');
+    }
+  }
+
+  return pages
+    .map((p) =>
+      p === '...'
+        ? `<span class="pagination-ellipsis">…</span>`
+        : `<button onclick="gotoPage(${p})" class="${p === current ? 'active' : ''}">${p}</button>`,
+    )
+    .join('');
+}
+
+function gotoPage(page) {
+  CURRENT_PAGE = page;
+  renderPage();
+}
+
+function changePageSize(size) {
+  PAGE_SIZE = Number(size) || 25;
+  CURRENT_PAGE = 1;
+  renderPage();
 }
 
 /**

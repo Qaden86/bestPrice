@@ -6,12 +6,9 @@ describe('pricesMatch', () => {
     expect(pricesMatch(135, 135)).toBe(true);
   });
 
-  it('accepts PDP + 10% VAT gross in cart', () => {
-    expect(pricesMatch(135, 148.5)).toBe(true);
-    expect(pricesMatch(256, 281.6)).toBe(true);
-  });
-
-  it('rejects unrelated prices', () => {
+  it('rejects any difference between PDP and cart', () => {
+    expect(pricesMatch(135, 148.5)).toBe(false);
+    expect(pricesMatch(256, 281.6)).toBe(false);
     expect(pricesMatch(135, 200)).toBe(false);
   });
 });

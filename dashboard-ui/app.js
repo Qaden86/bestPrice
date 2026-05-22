@@ -585,6 +585,9 @@ document.getElementById('compareRunSelect')?.addEventListener('change', () => {
 /**
  * RUN CONTROLS
  */
+let WAS_RUNNING = false;
+let LIVE_POLL_TIMER = null;
+
 async function refreshRunStatus() {
   try {
     const res = await fetch('/api/runs/active');
@@ -607,15 +610,37 @@ function applyRunStatus(active) {
   if (prodBtn) prodBtn.disabled = running;
   if (checkbox) checkbox.disabled = running;
 
-  if (!status) return;
-
-  if (running) {
-    status.textContent = `Running: ${active.env} · screenshots ${active.screenshots ? 'on' : 'off'} · started ${active.startedAt}`;
-    status.classList.add('active');
-  } else {
-    status.textContent = 'Idle';
-    status.classList.remove('active');
+  if (status) {
+    if (running) {
+      status.textContent = `Running: ${active.env} · screenshots ${active.screenshots ? 'on' : 'off'} · started ${active.startedAt}`;
+      status.classList.add('active');
+    } else {
+      status.textContent = 'Idle';
+      status.classList.remove('active');
+    }
   }
+
+  // Child-process crawls don't emit on the in-process resultBus, so the
+  // SSE stream never sees their writes. Poll the snapshot endpoint while
+  // a run is active so the table updates live, and do one final refresh
+  // when it transitions back to idle.
+  if (running && ACTIVE_RUN === 'current' && !LIVE_POLL_TIMER) {
+    LIVE_POLL_TIMER = setInterval(() => {
+      loadSnapshot();
+    }, 3000);
+  }
+
+  if (!running && LIVE_POLL_TIMER) {
+    clearInterval(LIVE_POLL_TIMER);
+    LIVE_POLL_TIMER = null;
+  }
+
+  if (WAS_RUNNING && !running && ACTIVE_RUN === 'current') {
+    loadSnapshot();
+    loadRunsList();
+  }
+
+  WAS_RUNNING = running;
 }
 
 async function startRun(env) {
@@ -642,6 +667,7 @@ async function startRun(env) {
 
     const data = await res.json();
     applyRunStatus(data.active);
+    loadSnapshot();
   } catch (err) {
     alert(`Failed to start: ${err}`);
   }

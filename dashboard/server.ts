@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import { spawn, ChildProcess } from 'child_process';
 
 import { loadResults, loadResultsFromFile } from './loadResults';
 import { resultBus } from '../crawler/output/resultStore';
@@ -7,7 +8,18 @@ import { listArchivedRuns } from '../crawler/output/runArchive';
 import { DATA_DIR, RUNS_DIR } from '../config/path';
 
 const app = express();
+app.use(express.json());
 const PORT = 3000;
+
+type ActiveRun = {
+  env: 'stage' | 'prod';
+  screenshots: boolean;
+  startedAt: string;
+  pid: number;
+};
+
+let activeRun: ActiveRun | null = null;
+let activeProcess: ChildProcess | null = null;
 
 const UI_PATH = path.resolve(__dirname, '../dashboard-ui');
 const INDEX_HTML = path.resolve(UI_PATH, 'index.html');
@@ -116,6 +128,55 @@ app.get('/api/results-stream', (req, res) => {
     resultBus.off('update', listener);
     res.end();
   });
+});
+
+app.get('/api/runs/active', (_req, res) => {
+  res.json({ active: activeRun });
+});
+
+app.post('/api/runs/start', (req, res) => {
+  if (activeRun) {
+    res.status(409).json({ error: 'A run is already in progress', active: activeRun });
+    return;
+  }
+
+  const env = req.body?.env;
+  if (env !== 'stage' && env !== 'prod') {
+    res.status(400).json({ error: 'env must be "stage" or "prod"' });
+    return;
+  }
+
+  const screenshots = req.body?.screenshots === true;
+  const script = env === 'stage' ? 'crawl:stage' : 'crawl:prod';
+
+  const child = spawn('npm', ['run', script], {
+    cwd: path.resolve(__dirname, '..'),
+    env: { ...process.env, CRAWL_SCREENSHOTS: screenshots ? 'true' : 'false' },
+    stdio: 'inherit',
+    detached: false,
+  });
+
+  activeProcess = child;
+  activeRun = {
+    env,
+    screenshots,
+    startedAt: new Date().toISOString(),
+    pid: child.pid ?? -1,
+  };
+
+  child.on('exit', (code) => {
+    console.log(`[run:${env}] exit code=${code}`);
+    activeRun = null;
+    activeProcess = null;
+  });
+
+  child.on('error', (err) => {
+    console.error(`[run:${env}] error`, err);
+    activeRun = null;
+    activeProcess = null;
+  });
+
+  res.json({ started: true, active: activeRun });
 });
 
 app.use((_req, res) => {

@@ -582,6 +582,77 @@ document.getElementById('compareRunSelect')?.addEventListener('change', () => {
   loadCompareBanner();
 });
 
+/**
+ * RUN CONTROLS
+ */
+async function refreshRunStatus() {
+  try {
+    const res = await fetch('/api/runs/active');
+    const data = await res.json();
+    applyRunStatus(data.active);
+  } catch (err) {
+    console.warn('[runs/active] failed', err);
+  }
+}
+
+function applyRunStatus(active) {
+  const stageBtn = document.getElementById('runStageBtn');
+  const prodBtn = document.getElementById('runProdBtn');
+  const status = document.getElementById('runStatus');
+  const checkbox = document.getElementById('runScreenshots');
+
+  const running = !!active;
+
+  if (stageBtn) stageBtn.disabled = running;
+  if (prodBtn) prodBtn.disabled = running;
+  if (checkbox) checkbox.disabled = running;
+
+  if (!status) return;
+
+  if (running) {
+    status.textContent = `Running: ${active.env} · screenshots ${active.screenshots ? 'on' : 'off'} · started ${active.startedAt}`;
+    status.classList.add('active');
+  } else {
+    status.textContent = 'Idle';
+    status.classList.remove('active');
+  }
+}
+
+async function startRun(env) {
+  const screenshots = !!document.getElementById('runScreenshots')?.checked;
+
+  const confirmMsg =
+    env === 'prod'
+      ? `Start a PROD crawl${screenshots ? ' WITH screenshots' : ''}?`
+      : `Start a STAGE crawl${screenshots ? ' WITH screenshots' : ''}?`;
+  if (!window.confirm(confirmMsg)) return;
+
+  try {
+    const res = await fetch('/api/runs/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ env, screenshots }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(`Failed to start: ${err.error || res.status}`);
+      return;
+    }
+
+    const data = await res.json();
+    applyRunStatus(data.active);
+  } catch (err) {
+    alert(`Failed to start: ${err}`);
+  }
+}
+
+document.getElementById('runStageBtn')?.addEventListener('click', () => startRun('stage'));
+document.getElementById('runProdBtn')?.addEventListener('click', () => startRun('prod'));
+
+refreshRunStatus();
+setInterval(refreshRunStatus, 5000);
+
 loadRunsList();
 loadSnapshot();
 if (ACTIVE_RUN === 'current') {

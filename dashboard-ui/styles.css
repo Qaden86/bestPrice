@@ -116,6 +116,71 @@ body {
   border-left: 4px solid #ef4444;
 }
 
+/* RUN CONTROLS */
+.run-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.run-btn {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: white;
+}
+
+.run-btn-stage {
+  background: #2563eb;
+  border-color: #1d4ed8;
+}
+
+.run-btn-stage:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.run-btn-prod {
+  background: #dc2626;
+  border-color: #b91c1c;
+}
+
+.run-btn-prod:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.run-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.run-checkbox {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+}
+
+.run-status {
+  font-size: 13px;
+  color: #6b7280;
+  margin-left: auto;
+}
+
+.run-status.active {
+  color: #b45309;
+  font-weight: 600;
+}
+
 /* TOOLBAR */
 .toolbar {
   display: flex;

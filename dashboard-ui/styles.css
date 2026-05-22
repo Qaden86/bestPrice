@@ -210,6 +210,7 @@ tr:hover {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
 }
 
 .modal {
@@ -221,6 +222,7 @@ tr:hover {
   background: white;
   padding: 16px;
   overflow: auto;
+  z-index: 1001;
 }
 
 .modal-header {

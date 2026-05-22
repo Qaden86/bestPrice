@@ -603,16 +603,19 @@ function applyRunStatus(active) {
   const prodBtn = document.getElementById('runProdBtn');
   const status = document.getElementById('runStatus');
   const checkbox = document.getElementById('runScreenshots');
+  const modeSelect = document.getElementById('runMode');
 
   const running = !!active;
 
   if (stageBtn) stageBtn.disabled = running;
   if (prodBtn) prodBtn.disabled = running;
   if (checkbox) checkbox.disabled = running;
+  if (modeSelect) modeSelect.disabled = running;
 
   if (status) {
     if (running) {
-      status.textContent = `Running: ${active.env} · screenshots ${active.screenshots ? 'on' : 'off'} · started ${active.startedAt}`;
+      const scope = active.mode === 'full' ? 'all' : 'sample';
+      status.textContent = `Running: ${active.env} · ${scope} · screenshots ${active.screenshots ? 'on' : 'off'} · started ${active.startedAt}`;
       status.classList.add('active');
     } else {
       status.textContent = 'Idle';
@@ -645,18 +648,17 @@ function applyRunStatus(active) {
 
 async function startRun(env) {
   const screenshots = !!document.getElementById('runScreenshots')?.checked;
+  const mode = document.getElementById('runMode')?.value === 'full' ? 'full' : 'sample';
+  const scopeLabel = mode === 'full' ? 'ALL urls' : 'sample';
 
-  const confirmMsg =
-    env === 'prod'
-      ? `Start a PROD crawl${screenshots ? ' WITH screenshots' : ''}?`
-      : `Start a STAGE crawl${screenshots ? ' WITH screenshots' : ''}?`;
+  const confirmMsg = `Start a ${env.toUpperCase()} crawl (${scopeLabel})${screenshots ? ' WITH screenshots' : ''}?`;
   if (!window.confirm(confirmMsg)) return;
 
   try {
     const res = await fetch('/api/runs/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ env, screenshots }),
+      body: JSON.stringify({ env, mode, screenshots }),
     });
 
     if (!res.ok) {

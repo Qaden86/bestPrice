@@ -161,6 +161,20 @@ body {
   cursor: not-allowed;
 }
 
+.run-mode {
+  font-size: 13px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: white;
+  cursor: pointer;
+}
+
+.run-mode:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .run-checkbox {
   display: flex;
   gap: 6px;

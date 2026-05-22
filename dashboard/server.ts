@@ -13,6 +13,7 @@ const PORT = 3000;
 
 type ActiveRun = {
   env: 'stage' | 'prod';
+  mode: 'sample' | 'full';
   screenshots: boolean;
   startedAt: string;
   pid: number;
@@ -146,8 +147,14 @@ app.post('/api/runs/start', (req, res) => {
     return;
   }
 
+  const mode = req.body?.mode ?? 'sample';
+  if (mode !== 'sample' && mode !== 'full') {
+    res.status(400).json({ error: 'mode must be "sample" or "full"' });
+    return;
+  }
+
   const screenshots = req.body?.screenshots === true;
-  const script = env === 'stage' ? 'crawl:stage' : 'crawl:prod';
+  const script = `crawl:${env}:${mode}`;
 
   const child = spawn('npm', ['run', script], {
     cwd: path.resolve(__dirname, '..'),
@@ -159,6 +166,7 @@ app.post('/api/runs/start', (req, res) => {
   activeProcess = child;
   activeRun = {
     env,
+    mode,
     screenshots,
     startedAt: new Date().toISOString(),
     pid: child.pid ?? -1,

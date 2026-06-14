@@ -15,6 +15,10 @@ jobs:
         with:
           node-version: lts/*
       - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
       - run: npm run test
 
   crawler-tests:

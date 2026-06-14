@@ -224,14 +224,14 @@ The UI surfaces:
 
 ## Running Tests
 
-| Command | What |
-|---------|------|
-| `npm test` | Vitest unit tests (`tests/unit/**`) |
+| Command | What                                              |
+|---------|---------------------------------------------------|
+| `npm test` | Vitest unit tests (`tests/unit/**`)               |
 | `npm run test:integration` | Vitest integration tests (`tests/integration/**`) |
-| `npm run test:e2e` | All Playwright tests |
-| `npm run test:header` | Header UI tests (desktop + mobile) |
-| `npm run test:sitemap` | Sitemap E2E |
-| `npm run test:all` | Vitest + Playwright |
+| `npm run test:e2e` | e2e Playwright tests                              |
+| `npm run test:header` | Header UI tests (desktop + mobile)                |
+| `npm run test:sitemap` | Sitemap E2E                                       |
+| `npm run test:all` | Vitest + Playwright                               |
 
 The Playwright crawl smoke (`tests/e2e/crawl.smoke.spec.ts`) runs in **contract mode** by default — asserts the pipeline produces a navigable result with a PDP price and cart-click attempt, without requiring an OK status. Set `CRAWL_SMOKE_STRICT=true` to assert a full OK + matching cart price (use when the target product is known good).
 
@@ -239,7 +239,7 @@ The Playwright crawl smoke (`tests/e2e/crawl.smoke.spec.ts`) runs in **contract 
 
 ## Page Object Model
 
-UI tests use Playwright fixtures + a single Header component (`src/components/Header.ts`).
+UI tests 
 
 Pattern:
 

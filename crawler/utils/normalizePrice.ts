@@ -10,26 +10,57 @@ export function normalizePrice(value: unknown): number | null {
   }
 
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? Math.round(value * 100) / 100 : null;
+    return Number.isFinite(value)
+      ? Math.round(value * 100) / 100
+      : null;
   }
 
-  const raw = String(value).replace(/\u00A0/g, ' ').trim();
+  const raw = String(value)
+    .replace(/\u00A0/g, ' ')
+    .trim();
+
   if (!raw) {
     return null;
   }
 
-  const compact = raw.replace(/\s/g, '').replace(/[^\d.,-]/g, '').replace(',', '.');
+  // ================================
+  // safe separator handling
+  // ================================
+  const cleaned = raw
+    .replace(/\s/g, '')
+    .replace(/[^\d.,-]/g, '');
 
-  if (/^-?\d+(\.\d+)?$/.test(compact)) {
-    const n = Number(compact);
-    return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+  if (!cleaned) {
+  return null;
   }
 
-  const digitsOnly = raw.replace(/[^\d]/g, '');
-  if (!digitsOnly) {
+  const lastComma = cleaned.lastIndexOf(',');
+  const lastDot = cleaned.lastIndexOf('.');
+
+  let normalized = cleaned;
+
+  if (lastComma > lastDot) {
+    // EU format: 1.200,50 → 1200.50
+    normalized =
+      cleaned.slice(0, lastComma).replace(/\./g, '') +
+      '.' +
+      cleaned.slice(lastComma + 1);
+  } else if (lastDot > lastComma) {
+    // US format: 1,200.50 → 1200.50
+    normalized =
+      cleaned.slice(0, lastDot).replace(/,/g, '') +
+      '.' +
+      cleaned.slice(lastDot + 1);
+  } else {
+    // no decimals
+    normalized = cleaned.replace(/,/g, '');
+  }
+
+  const num = Number(normalized);
+
+  if (!Number.isFinite(num)) {
     return null;
   }
 
-  const n2 = Number(digitsOnly);
-  return Number.isFinite(n2) ? n2 : null;
+  return Math.round(num * 100) / 100;
 }

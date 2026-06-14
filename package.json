@@ -14,8 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:unit": "vitest run",
-    "test:integration": "vitest run --include='tests/integration/**'",
+    "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test",
     "test:header": "playwright test tests/e2e/crawl.smoke.spec.ts",
     "test:sitemap": "playwright test tests/e2e/sitemap.spec.ts",
@@ -39,7 +38,7 @@
     "cheerio": "^1.2.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "p-limit": "^7.3.0",
+    "p-limit": "^5.0.0",
     "typescript": "^6.0.3",
     "xml2js": "^0.6.2"
   }

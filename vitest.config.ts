@@ -12,7 +12,10 @@ export default defineConfig({
     globals: true,
     environment: 'node',
 
-    include: ['tests/unit/**'],
+    include: [
+      'tests/unit/**',
+      'tests/integration/**',
+    ],
     exclude: ['tests/e2e/**', 'tests/header/**'],
   },
 

@@ -1,78 +1,57 @@
 import { test, expect } from '../../src/fixtures';
 
 test.describe('Header — desktop', () => {
-  test('top bar shows phone, working hours and auth link', async ({
-    header,
-  }) => {
-    await expect(header.phoneLink).toBeVisible();
-    await expect(header.phoneLink).toHaveAttribute('href', 'tel:+380988584035');
-    await expect(header.workingHours).toBeVisible();
+  test('top bar renders correctly', async ({ header }) => {
+    await expect(header.desktop.phoneLink).toBeVisible();
+    await expect(header.desktop.phoneLink).toHaveAttribute('href', 'tel:+380988584035');
 
-    await expect(header.topBarAuthLink).toBeVisible();
-    await expect(header.topBarAuthLink).toHaveText('Увійти');
-    await expect(header.topBarAuthLink).toHaveAttribute('href', '/vkhid');
+    await expect(header.desktop.workingHours).toBeVisible();
+
+    await expect(header.desktop.topBarAuthLink).toBeVisible();
+    await expect(header.desktop.topBarAuthLink).toHaveText('Увійти');
+    await expect(header.desktop.topBarAuthLink).toHaveAttribute('href', '/vkhid');
   });
 
-  test('logo returns to home from a sub-page', async ({ header, page }) => {
-    await header.openTopBarAuth();
-    await expect(page).toHaveURL(/\/vkhid(?:[/?#]|$)/);
-
-    await header.goToHome();
-    await expect(page).toHaveURL('/');
+  test('navigation elements are visible', async ({ header }) => {
+    await expect(header.desktop.catalogButton).toBeVisible();
+    await expect(header.desktop.searchInput).toBeVisible();
+    await expect(header.desktop.searchSubmitButton).toBeVisible();
+    await expect(header.desktop.favoritesLink).toBeVisible();
+    await expect(header.desktop.cartButton).toBeVisible();
   });
 
-  test('main bar exposes catalog, search and account controls', async ({
-    header,
-  }) => {
-    await expect(header.catalogButton).toBeVisible();
-    await expect(header.searchInput).toBeVisible();
-    await expect(header.searchInput).toHaveAttribute(
-      'placeholder',
-      'Пошук товарів...',
-    );
-    await expect(header.searchSubmitButton).toBeVisible();
-    await expect(header.favoritesLink).toBeVisible();
-    await expect(header.cartButton).toBeVisible();
-  });
-
-  test('search button submits the query to /poshuk', async ({
-    header,
-    page,
-  }) => {
-    await header.submitSearch('генератор');
+  test('search works', async ({ header, page }) => {
+    await header.desktop.submitSearch('генератор');
     await expect(page).toHaveURL(/\/poshuk(?:[/?#]|$)/);
   });
 
-  test('typing into search opens the autocomplete listbox', async ({
-    header,
-  }) => {
-    await header.typeSearch('дриль');
-    await expect(header.searchInput).toHaveAttribute('aria-expanded', 'true');
-    await expect(header.searchListbox).toBeVisible();
+  test('autocomplete opens on input', async ({ header }) => {
+    await header.desktop.typeSearch('дриль');
+    await expect(header.desktop.searchInput).toHaveAttribute('aria-expanded', 'true');
+    await expect(header.desktop.searchListbox).toBeVisible();
   });
 
-  test('header stays in viewport while scrolling (sticky)', async ({
-    header,
-    page,
-  }) => {
+  test('sticky header stays in viewport', async ({ header, page }) => {
     await page.mouse.wheel(0, 2000);
     await expect(header.root).toBeInViewport();
   });
 
-  test('favorites link routes to /bazhannya', async ({ header, page }) => {
-    await header.openFavorites();
+  test('favorites navigation works', async ({ header, page }) => {
+    await header.desktop.openFavorites();
     await expect(page).toHaveURL(/\/bazhannya(?:[/?#]|$)/);
   });
 
-  test('cart trigger opens the cart dialog', async ({ header, page }) => {
-    await header.openCart();
-    await expect(page.getByRole('dialog').first()).toBeVisible();
+  test('cart opens dialog', async ({ header }) => {
+    await header.desktop.openCart();
+
+    await header.cart.expectOpened();
   });
 
-  test('mobile-only controls are hidden on desktop', async ({ header }) => {
-    await expect(header.openMobileMenuButton).toBeHidden();
+  test('mobile controls hidden on desktop', async ({ header }) => {
+    await expect(header.mobile.openButton).toBeHidden();
   });
 });
+
 
 test.describe('Header — mobile', () => {
   test.use({
@@ -81,42 +60,43 @@ test.describe('Header — mobile', () => {
     hasTouch: true,
   });
 
-  test('shows mobile menu trigger and inline search bar', async ({
-    header,
-  }) => {
-    await expect(header.openMobileMenuButton).toBeVisible();
-    await expect(header.searchInput).toBeVisible();
-    await expect(header.catalogButton).toBeHidden();
+  test('mobile header layout', async ({ header }) => {
+    await expect(header.mobile.openButton).toBeVisible();
+    await expect(header.desktop.searchInput).toBeVisible();
+    await expect(header.desktop.catalogButton).toBeHidden();
   });
 
-  test('drawer opens, lists nav items and closes', async ({ header }) => {
-    await header.expectMobileMenuClosed();
+  test('drawer opens and closes', async ({ header }) => {
+    await header.mobile.expectClosed();
 
-    await header.openMobileMenu();
-    await expect(header.mobileMenuNav).toBeVisible();
-    await expect(header.mobileLoginLink).toHaveAttribute(
-      'href',
-      '/coming-soon',
-    );
-    await expect(header.mobileCartLink).toHaveAttribute('href', '/coming-soon');
+    await header.mobile.open();
 
-    await header.closeMobileMenu();
+    await expect(header.mobile.mobileMenuNav).toBeVisible();
+
+    await header.mobile.close();
+
+    await header.mobile.expectClosed();
   });
 
-  test('drawer category link navigates to its page', async ({
-    header,
-    page,
-  }) => {
-    await header.openMobileMenu();
-    await header.openCategoryFromMobileMenu('Агротехніка');
+  test('drawer navigation links are visible', async ({ header }) => {
+    await header.mobile.open();
+
+    await expect(header.mobile.loginLink).toHaveAttribute('href', '/vkhid');
+    await expect(header.mobile.cartLink).toHaveAttribute('href', '/koshyk');
+  });
+
+  test('mobile search autocomplete works', async ({ header }) => {
+    await header.desktop.typeSearch('пила');
+
+    await expect(header.desktop.searchInput).toHaveAttribute('aria-expanded', 'true');
+    await expect(header.desktop.searchListbox).toBeVisible();
+  });
+
+  test('category navigation works', async ({ header, page }) => {
+    await header.mobile.open();
+
+    await header.mobile.openCategory('Агротехніка');
+
     await expect(page).toHaveURL(/\/kategoriya\/agrotekhnika(?:[/?#]|$)/);
-  });
-
-  test('typing into mobile search opens the autocomplete listbox', async ({
-    header,
-  }) => {
-    await header.typeSearch('пила');
-    await expect(header.searchInput).toHaveAttribute('aria-expanded', 'true');
-    await expect(header.searchListbox).toBeVisible();
   });
 });

@@ -3,7 +3,14 @@
  * pipeline and integration tests.
  */
 
-export const BASE_URL = (process.env.BASE_URL ?? 'https://bestprice.com.ua').replace(/\/+$/, '');
+const rawBaseUrl = process.env.BASE_URL;
+
+export const BASE_URL =
+  rawBaseUrl &&
+  rawBaseUrl !== '/' &&
+  rawBaseUrl.startsWith('http')
+    ? rawBaseUrl.replace(/\/+$/, '')
+    : 'https://bestprice.com.ua';
 
 export const SITEMAP_REQUEST_TIMEOUT_MS = Number(process.env.SITEMAP_REQUEST_TIMEOUT_MS ?? 15000);
 

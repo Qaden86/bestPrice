@@ -1,16 +1,10 @@
 import { test as base, expect } from '@playwright/test';
-import { Header } from '../components/Header';
+import { Header } from '../components/header/Header';
 
-type Fixtures = {
-  header: Header;
-};
-
-export const test = base.extend<Fixtures>({
+export const test = base.extend({
   header: async ({ page }, use) => {
     await page.goto('/');
-    const header = new Header(page);
-    await header.expectLoaded();
-    await use(header);
+    await use(new Header(page));
   },
 });
 

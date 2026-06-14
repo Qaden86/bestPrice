@@ -1,85 +1,174 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { validator } from '@crawler/validation/validator';
 
-const pdpOk = {
-  selector: '[data-testid="product-detail-price"]',
-  selectorFound: true,
-  price: 100,
-};
+import {
+  DEFAULT_ADD_TO_CART_SELECTOR,
+  DEFAULT_CART_SELECTOR,
+  DEFAULT_PDP_SELECTOR,
+  DIFFERENT_PRICE,
+  VALID_PRICE,
+  ZERO_PRICE,
+} from '../../helpers/constants';
 
-const cartOk = {
-  selector: '[data-testid="cart-item-line-total"]',
-  selectorFound: true,
-  price: 100,
-};
+import {
+  createAddToCart,
+  createPriceExtraction,
+  createValidationInput,
+} from '../../helpers/factories';
 
-const addOk = {
-  selector: '[data-testid="product-detail-add-to-cart"]',
-  selectorFound: true,
-  clicked: true,
-};
+describe('validator.checkPdp', () => {
+  it('returns SELECTOR_NOT_FOUND when pdp selector is missing', () => {
+    const result = validator.checkPdp(
+      createPriceExtraction({
+        selectorFound: false,
+      }),
+    );
 
-describe('validator', () => {
-  it('accepts matching prices', () => {
-    const result = validator.validate({
-      url: 'https://test.com',
-      pdp: pdpOk,
-      cart: cartOk,
-      addToCart: addOk,
+    expect(result).toEqual({
+      status: 'FAIL',
+      reason: 'SELECTOR_NOT_FOUND',
+      match: false,
+      selector: DEFAULT_PDP_SELECTOR,
+      detail: 'pdp_price',
     });
+  });
+
+  it('returns MISSING_PRICE when price is null', () => {
+    const result = validator.checkPdp(
+      createPriceExtraction({
+        price: null,
+      }),
+    );
+
+    expect(result?.reason).toBe('MISSING_PRICE');
+  });
+});
+
+describe('validator.checkAddToCart', () => {
+  it('fails when selector is not found', () => {
+    const result = validator.checkAddToCart(
+      createAddToCart({
+        selectorFound: false,
+      }),
+    );
+
+    expect(result?.reason).toBe('SELECTOR_NOT_FOUND');
+  });
+
+  it('fails when click not triggered', () => {
+    const result = validator.checkAddToCart(
+      createAddToCart({
+        clicked: false,
+      }),
+    );
+
+    expect(result?.reason).toBe('ADD_TO_CART_FAILED');
+  });
+
+  it('passes when valid', () => {
+    expect(
+      validator.checkAddToCart(createAddToCart()),
+    ).toBeNull();
+  });
+});
+
+describe('validator.checkCart', () => {
+  it('returns MISSING_PRICE when cart price is invalid', () => {
+    const result = validator.checkCart(
+      createPriceExtraction({
+        price: null,
+        selectorFound: true,
+      }),
+    );
+
+    expect(result?.reason).toBe('MISSING_PRICE');
+  });
+
+  it('returns SELECTOR_NOT_FOUND when selector missing', () => {
+    const result = validator.checkCart(
+      createPriceExtraction({
+        selectorFound: false,
+      }),
+    );
+
+    expect(result?.reason).toBe('SELECTOR_NOT_FOUND');
+  });
+
+  it('passes valid cart', () => {
+    expect(
+      validator.checkCart(createPriceExtraction()),
+    ).toBeNull();
+  });
+});
+
+describe('validator.checkPrices', () => {
+  it('returns PRICE_IS_ZERO when both prices are zero', () => {
+    const result = validator.checkPrices(
+      createPriceExtraction({ price: ZERO_PRICE }),
+      createPriceExtraction({ price: ZERO_PRICE }),
+    );
+
+    expect(result?.reason).toBe('PRICE_IS_ZERO');
+  });
+
+  it('returns PRICE_MISMATCH when prices differ', () => {
+    const result = validator.checkPrices(
+      createPriceExtraction({ price: VALID_PRICE }),
+      createPriceExtraction({ price: DIFFERENT_PRICE }),
+    );
+
+    expect(result?.reason).toBe('PRICE_MISMATCH');
+  });
+
+  it('returns null when prices match', () => {
+    expect(
+      validator.checkPrices(
+        createPriceExtraction({ price: VALID_PRICE }),
+        createPriceExtraction({ price: VALID_PRICE }),
+      ),
+    ).toBeNull();
+  });
+});
+
+describe('validator.validate (integration flow)', () => {
+  it('returns OK when everything is valid', () => {
+    const result = validator.validate(createValidationInput());
 
     expect(result.status).toBe('OK');
-    expect(result.match).toBe(true);
   });
 
-  it('reports SELECTOR_NOT_FOUND for PDP', () => {
-    const result = validator.validate({
-      url: 'https://test.com',
-      pdp: { ...pdpOk, selectorFound: false },
-      cart: cartOk,
-      addToCart: addOk,
-    });
+  it('prioritizes PDP errors first', () => {
+    const result = validator.validate(
+      createValidationInput({
+        pdp: createPriceExtraction({ selectorFound: false }),
+        addToCart: createAddToCart({ clicked: false }),
+      }),
+    );
 
-    expect(result.status).toBe('FAIL');
-    if (result.status === 'FAIL') {
-      expect(result.reason).toBe('SELECTOR_NOT_FOUND');
-      expect(result.selector).toBe(pdpOk.selector);
-    }
+    expect(result.reason).toBe('SELECTOR_NOT_FOUND');
+    expect(result.selector).toBe(DEFAULT_PDP_SELECTOR);
   });
 
-  it('reports MISSING_PRICE', () => {
-    const result = validator.validate({
-      url: 'https://test.com',
-      pdp: { ...pdpOk, price: null },
-      cart: cartOk,
-      addToCart: addOk,
-    });
+  it('prioritizes addToCart over cart', () => {
+    const result = validator.validate(
+      createValidationInput({
+        addToCart: createAddToCart({ clicked: false }),
+        cart: createPriceExtraction({ selectorFound: false }),
+      }),
+    );
 
-    if (result.status === 'FAIL') {
-      expect(result.reason).toBe('MISSING_PRICE');
-      expect(result.detail).toBe('pdp');
-    }
+    expect(result.reason).toBe('ADD_TO_CART_FAILED');
+    expect(result.selector).toBe(DEFAULT_ADD_TO_CART_SELECTOR);
   });
 
-  it('reports PRICE_IS_ZERO', () => {
-    const result = validator.validate({
-      url: 'https://test.com',
-      pdp: { ...pdpOk, price: 0 },
-      cart: { ...cartOk, price: 0 },
-      addToCart: addOk,
-    });
-
-    expect(result.reason).toBe('PRICE_IS_ZERO');
-  });
-
-  it('reports PRICE_MISMATCH', () => {
-    const result = validator.validate({
-      url: 'https://test.com',
-      pdp: pdpOk,
-      cart: { ...cartOk, price: 2 },
-      addToCart: addOk,
-    });
+  it('returns PRICE_MISMATCH when flow passes all checks', () => {
+    const result = validator.validate(
+      createValidationInput({
+        pdp: createPriceExtraction({ price: VALID_PRICE }),
+        cart: createPriceExtraction({ price: DIFFERENT_PRICE }),
+      }),
+    );
 
     expect(result.reason).toBe('PRICE_MISMATCH');
   });

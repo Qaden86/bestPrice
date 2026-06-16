@@ -28,7 +28,7 @@
     "test:allure:e2e": "playwright test tests/e2e",
     "test:allure:header": "playwright test tests/header",
     "test:allure:sitemap": "playwright test tests/e2e/sitemap.spec.ts",
-    "allure:generate:e2e": "allure generate allure-results-playwright --clean -o allure-report-playwright",
+    "allure:generate:e2e": "allure generate allure-results --clean -o allure-report-playwright",
     "allure:open:e2e": "allure open allure-report-playwright",
     "test:allure": "npm run allure:clean && npm run test:allure:unit && npm run test:allure:integration && npm run test:allure:e2e && npm run test:allure:header && npm run allure:generate:unit && npm run allure:generate:e2e"
   },

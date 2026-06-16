@@ -32,8 +32,8 @@ sitemap → URL filter → concurrent workers (browser pool) → crawl + validat
 ## Tech Stack
 
 | Tool                        | Purpose                               |
-| --------------------------- | ------------------------------------- |
-| **Node.js (>=18 / lts/\*)** | Runtime                               |
+|-----------------------------| ------------------------------------- |
+| **Node.js (>=20 / lts/\*)** | Runtime                               |
 | **TypeScript**              | Static typing                         |
 | **Playwright**              | Browser automation (crawl + UI tests) |
 | **Vitest**                  | Unit & integration tests              |
@@ -270,7 +270,7 @@ Report output: allure-report-playwright
 Pipeline flow:
 Clean previous results
 Run Vitest unit tests → allure-results-vitest
-Run Playwright E2E tests → allure-results-playwright
+Run Playwright E2E tests → allure-results
 Generate unit report → allure-report-vitest
 Generate e2e report → allure-report-playwright
 

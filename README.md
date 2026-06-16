@@ -304,7 +304,7 @@ Adding a new page object:
 
 ## CI/CD
 
-GitHub Actions workflow: `.github/workflows/playwright.yml`. Three parallel jobs on push/PR to `main`:
+GitHub Actions workflow: `.github/workflows/playwright.yml`. Four parallel jobs on push/PR to `main`:
 
 - **unit-tests** — `npm run test` (Vitest)
 - **crawler-tests** — `npx playwright test tests/e2e/crawl.smoke.spec.ts` (contract mode — hits live site)

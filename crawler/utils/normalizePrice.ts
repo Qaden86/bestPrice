@@ -13,12 +13,17 @@ export function normalizePrice(value: unknown): number | null {
     return Number.isFinite(value) ? Math.round(value * 100) / 100 : null;
   }
 
-  const raw = String(value).replace(/\u00A0/g, ' ').trim();
+  const raw = String(value)
+    .replace(/\u00A0/g, ' ')
+    .trim();
   if (!raw) {
     return null;
   }
 
-  const compact = raw.replace(/\s/g, '').replace(/[^\d.,-]/g, '').replace(',', '.');
+  const compact = raw
+    .replace(/\s/g, '')
+    .replace(/[^\d.,-]/g, '')
+    .replace(',', '.');
 
   if (/^-?\d+(\.\d+)?$/.test(compact)) {
     const n = Number(compact);

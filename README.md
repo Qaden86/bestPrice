@@ -3,8 +3,8 @@
 End-to-end pipeline for [bestprice.com.ua](https://bestprice.com.ua):
 
 - **Crawler** — concurrent product-page crawler that extracts PDP/cart prices, validates parity, and streams results to a dashboard.
-- **UI tests** — Playwright + Page Object Model for the storefront.
-- **Unit & integration tests** — Vitest for parsing, validation, retry, and extractors.
+- **UI tests & integration tests** — Playwright + Page Object Model for the storefront.
+- **Unit tests** — Vitest for parsing, validation, retry, and extractors.
 
 ```
 sitemap → URL filter → concurrent workers (browser pool) → crawl + validate → result store → dashboard (SSE)
@@ -31,19 +31,19 @@ sitemap → URL filter → concurrent workers (browser pool) → crawl + validat
 
 ## Tech Stack
 
-| Tool | Purpose |
-|------|---------|
-| **Node.js (>=18 / lts/\*)** | Runtime |
-| **TypeScript** | Static typing |
-| **Playwright** | Browser automation (crawl + UI tests) |
-| **Vitest** | Unit & integration tests |
-| **Express** | Dashboard HTTP/SSE server |
-| **Cheerio + xml2js** | Sitemap & JSON-LD parsing |
-| **Axios** | HTTP fetch |
-| **p-limit** | Concurrency primitives |
-| **dotenv / dotenv-cli** | Environment management |
-| **Prettier** | Formatting |
-| **GitHub Actions** | CI |
+| Tool                        | Purpose                               |
+| --------------------------- | ------------------------------------- |
+| **Node.js (>=18 / lts/\*)** | Runtime                               |
+| **TypeScript**              | Static typing                         |
+| **Playwright**              | Browser automation (crawl + UI tests) |
+| **Vitest**                  | Unit & integration tests              |
+| **Express**                 | Dashboard HTTP/SSE server             |
+| **Cheerio + xml2js**        | Sitemap & JSON-LD parsing             |
+| **Axios**                   | HTTP fetch                            |
+| **p-limit**                 | Concurrency primitives                |
+| **dotenv / dotenv-cli**     | Environment management                |
+| **Prettier**                | Formatting                            |
+| **GitHub Actions**          | CI                                    |
 
 ---
 
@@ -94,7 +94,7 @@ bestPrice/
 │   ├── business/               # Cross-cutting business rules
 │   ├── e2e/                    # Playwright smoke (crawl + sitemap)
 │   ├── header/                 # Playwright UI tests (desktop + mobile)
-│   ├── integration/            # Vitest integration tests
+│   ├── integration/            # Playwright integration tests
 │   └── unit/                   # Vitest unit tests (extractors, retry, utils, validation)
 ├── data/                       # Local results.ndjson + runs/<runId>/
 ├── playwright.config.ts
@@ -132,16 +132,16 @@ cp .env.example .env.stage
 cp .env.example .env.prod
 ```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BASE_URL` | `https://bestprice.com.ua` | Site origin used by the crawler & Playwright tests |
-| `NODE_ENV` | `stage` | `stage` or `prod` (drives default concurrency) |
-| `EXECUTION_MODE` | `full` | `full` or `sample` |
-| `SAMPLE_SIZE` | `100` | URLs to crawl in sample mode |
-| `CRAWL_CONCURRENCY` | `3` (stage) / `5` (prod) | Worker count |
-| `CRAWL_SCREENSHOTS` | `true` (sample) / `false` (full) | Failure screenshots. Set `true`/`false` to override the default for the current mode. |
-| `CRAWL_SCREENSHOT_TIMEOUT_MS` | `8000` | Viewport-only screenshot timeout |
-| `CRAWL_SMOKE_STRICT` | `false` | If `true`, the E2E smoke spec asserts an OK result with matching cart price |
+| Variable                      | Default                          | Description                                                                           |
+| ----------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
+| `BASE_URL`                    | `https://bestprice.com.ua`       | Site origin used by the crawler & Playwright tests                                    |
+| `NODE_ENV`                    | `stage`                          | `stage` or `prod` (drives default concurrency)                                        |
+| `EXECUTION_MODE`              | `full`                           | `full` or `sample`                                                                    |
+| `SAMPLE_SIZE`                 | `100`                            | URLs to crawl in sample mode                                                          |
+| `CRAWL_CONCURRENCY`           | `3` (stage) / `5` (prod)         | Worker count                                                                          |
+| `CRAWL_SCREENSHOTS`           | `true` (sample) / `false` (full) | Failure screenshots. Set `true`/`false` to override the default for the current mode. |
+| `CRAWL_SCREENSHOT_TIMEOUT_MS` | `8000`                           | Viewport-only screenshot timeout                                                      |
+| `CRAWL_SMOKE_STRICT`          | `false`                          | If `true`, the E2E smoke spec asserts an OK result with matching cart price           |
 
 Concurrency precedence: `CRAWL_CONCURRENCY` env var > environment default (`stage`/`prod`). See `config/executionConfig.ts`.
 
@@ -149,14 +149,14 @@ Concurrency precedence: `CRAWL_CONCURRENCY` env var > environment default (`stag
 
 ## Running the Crawler
 
-| Command | Description |
-|---------|-------------|
-| `npm run crawl:stage` | Crawl using `.env.stage` |
-| `npm run crawl:stage:sample` | Sample run on stage |
-| `npm run crawl:stage:full` | Full sitemap on stage |
-| `npm run crawl:prod` | Crawl using `.env.prod` |
-| `npm run crawl:prod:sample` | Sample run on prod |
-| `npm run crawl:prod:full` | Full prod crawl |
+| Command                      | Description              |
+| ---------------------------- | ------------------------ |
+| `npm run crawl:stage`        | Crawl using `.env.stage` |
+| `npm run crawl:stage:sample` | Sample run on stage      |
+| `npm run crawl:stage:full`   | Full sitemap on stage    |
+| `npm run crawl:prod`         | Crawl using `.env.prod`  |
+| `npm run crawl:prod:sample`  | Sample run on prod       |
+| `npm run crawl:prod:full`    | Full prod crawl          |
 
 Override concurrency ad hoc:
 
@@ -201,15 +201,15 @@ Then open <http://localhost:3000>.
 
 Endpoints:
 
-| Path | Purpose |
-|------|---------|
-| `/api/results` | Current run rows |
-| `/api/stats` | Totals + success/fail rate + reason counts + **bucketDistribution** + **topFailingSteps** |
-| `/api/runs` | List of archived runs |
-| `/api/runs/:runId/results` | Rows for one archived run |
-| `/api/runs/:runId/stats` | Stats for one archived run |
-| `/api/runs/compare?a=&b=` | Diff between two runs (improved / regressed / stability delta / reason trends) |
-| `/api/results-stream` | Server-Sent Events stream of live updates |
+| Path                       | Purpose                                                                                   |
+| -------------------------- | ----------------------------------------------------------------------------------------- |
+| `/api/results`             | Current run rows                                                                          |
+| `/api/stats`               | Totals + success/fail rate + reason counts + **bucketDistribution** + **topFailingSteps** |
+| `/api/runs`                | List of archived runs                                                                     |
+| `/api/runs/:runId/results` | Rows for one archived run                                                                 |
+| `/api/runs/:runId/stats`   | Stats for one archived run                                                                |
+| `/api/runs/compare?a=&b=`  | Diff between two runs (improved / regressed / stability delta / reason trends)            |
+| `/api/results-stream`      | Server-Sent Events stream of live updates                                                 |
 
 The UI surfaces:
 
@@ -224,18 +224,55 @@ The UI surfaces:
 
 ## Running Tests
 
-| Command | What |
-|---------|------|
-| `npm test` | Vitest unit tests (`tests/unit/**`) |
-| `npm run test:integration` | Vitest integration tests (`tests/integration/**`) |
-| `npm run test:e2e` | All Playwright tests |
-| `npm run test:header` | Header UI tests (desktop + mobile) |
-| `npm run test:sitemap` | Sitemap E2E |
-| `npm run test:all` | Vitest + Playwright |
+| Command                    | What                                                  |
+| -------------------------- | ----------------------------------------------------- |
+| `npm test`                 | Vitest unit tests (`tests/unit/**`)                   |
+| `npm run test:integration` | Playwright integration tests (`tests/integration/**`) |
+| `npm run test:e2e`         | e2e Playwright tests                                  |
+| `npm run test:header`      | Header UI tests (desktop + mobile)                    |
+| `npm run test:sitemap`     | Sitemap E2E                                           |
+| `npm run test:all`         | Vitest + Playwright                                   |
 
 The Playwright crawl smoke (`tests/e2e/crawl.smoke.spec.ts`) runs in **contract mode** by default — asserts the pipeline produces a navigable result with a PDP price and cart-click attempt, without requiring an OK status. Set `CRAWL_SMOKE_STRICT=true` to assert a full OK + matching cart price (use when the target product is known good).
 
 ---
+
+## Allure Reports
+
+Vitest (Unit Layer)
+Reporter: allure-vitest/reporter
+Results directory: allure-results-vitest
+Report output: allure-report-vitest
+
+| Command                        | What                             |
+| ------------------------------ | -------------------------------- |
+| `npm run test:allure:unit`     | run unit tests (`tests/unit/**`) |
+| `npm run allure:generate:unit` | generate report                  |
+| `npm run allure:open:unit`     | open report                      |
+
+Playwright (E2E / Integration Layer)
+Reporter: allure-playwright
+Results directory: allure-results
+Report output: allure-report-playwright
+
+| Command                           | What                                                 |
+| --------------------------------- | ---------------------------------------------------- |
+| `npm run test:allure:e2e`         | run full E2E suite (tests/e2e/\*\*)                  |
+| `npm run test:allure:integration` | run integration tests (tests/integration/\*\*)       |
+| `npm run test:allure:header`      | run header UI tests (tests/header/\*\*)              |
+| `npm run test:allure:sitemap`     | run sitemap tests (tests/e2e/sitemap.spec.ts)        |
+|                                   |                                                      |
+| `npm run allure:generate:e2e`     | Generate E2E report                                  |
+| `npm run allure:open:e2e`         | Open E2E report                                      |
+| `npm run allure:clean`            | removes all allure results and reports (both layers) |
+| `npm run test:allure`             | runs full suite + generates separate reports         |
+
+Pipeline flow:
+Clean previous results
+Run Vitest unit tests → allure-results-vitest
+Run Playwright E2E tests → allure-results-playwright
+Generate unit report → allure-report-vitest
+Generate e2e report → allure-report-playwright
 
 ## Page Object Model
 
@@ -271,7 +308,7 @@ GitHub Actions workflow: `.github/workflows/playwright.yml`. Three parallel jobs
 
 - **unit-tests** — `npm run test` (Vitest)
 - **crawler-tests** — `npx playwright test tests/e2e/crawl.smoke.spec.ts` (contract mode — hits live site)
-- **ui-tests** — `npx playwright test header`
+- **ui-tests** — `npm run test:header`
 
 Use `CRAWL_SMOKE_STRICT=true` locally before promoting to be sure the strict-success path still works against the target product.
 

@@ -27,7 +27,10 @@ async function drainQueue(): Promise<void> {
 }
 
 export function upsertResult(result: CrawlResult): void {
-  const key = typeof result.url === 'string' ? result.url : (result.url as { url: string })?.url;
+  const key =
+    typeof result.url === 'string'
+      ? result.url
+      : (result.url as { url: string })?.url;
   if (!key) return;
 
   resultBus.emit('update', result);

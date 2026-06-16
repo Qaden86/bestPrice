@@ -12,7 +12,10 @@ async function firstMatchingSelector(
   const root: Page | Locator = scope ?? page;
 
   for (const selector of selectors) {
-    const count = await root.locator(selector).count().catch(() => 0);
+    const count = await root
+      .locator(selector)
+      .count()
+      .catch(() => 0);
     if (count > 0) {
       return { selector, found: true };
     }
@@ -106,7 +109,10 @@ export const productExtractor = {
 
   async extractCartPrice(page: Page): Promise<PriceExtraction> {
     const itemSelector = SELECTORS.cart.item;
-    const itemCount = await page.locator(itemSelector).count().catch(() => 0);
+    const itemCount = await page
+      .locator(itemSelector)
+      .count()
+      .catch(() => 0);
 
     if (itemCount === 0) {
       return {
@@ -133,7 +139,9 @@ export const productExtractor = {
       };
     }
 
-    const text = await priceLoc.textContent({ timeout: 5_000 }).catch(() => null);
+    const text = await priceLoc
+      .textContent({ timeout: 5_000 })
+      .catch(() => null);
     return {
       selector: priceSelector,
       selectorFound: true,

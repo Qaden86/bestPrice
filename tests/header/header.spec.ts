@@ -94,11 +94,8 @@ test.describe('Header — mobile', () => {
 
     await header.openMobileMenu();
     await expect(header.mobileMenuNav).toBeVisible();
-    await expect(header.mobileLoginLink).toHaveAttribute(
-      'href',
-      '/coming-soon',
-    );
-    await expect(header.mobileCartLink).toHaveAttribute('href', '/coming-soon');
+    await expect(header.mobileLoginLink).toHaveAttribute('href', '/vkhid');
+    await expect(header.mobileCartLink).toHaveAttribute('href', '/koshyk');
 
     await header.closeMobileMenu();
   });

@@ -47,11 +47,7 @@ function renderReasonFilter() {
   const currentValue = select.value;
 
   const reasons = [
-    ...new Set(
-      ALL_ROWS
-        .map((r) => r.reason)
-        .filter(Boolean),
-    ),
+    ...new Set(ALL_ROWS.map((r) => r.reason).filter(Boolean)),
   ].sort();
 
   select.innerHTML = `
@@ -87,7 +83,8 @@ async function loadRunsList() {
     compareSelect.innerHTML =
       '<option value="">Compare with…</option>' +
       ARCHIVED_RUNS.map(
-        (r) => `<option value="${r.runId}">${r.finishedAt.slice(0, 19)}</option>`,
+        (r) =>
+          `<option value="${r.runId}">${r.finishedAt.slice(0, 19)}</option>`,
       ).join('');
   } catch (e) {
     console.warn('[RUNS LIST]', e);
@@ -189,16 +186,12 @@ function initStream() {
 function renderStatsFromRows() {
   const total = ALL_ROWS.length;
 
-  const success = ALL_ROWS.filter(
-    (r) => r.status === 'OK' && r.match,
-  ).length;
+  const success = ALL_ROWS.filter((r) => r.status === 'OK' && r.match).length;
 
   const failed = total - success;
 
   const cartFailures = ALL_ROWS.filter(
-    (r) =>
-      r.reason === 'ADD_TO_CART_FAILED' ||
-      r.cartPrice == null,
+    (r) => r.reason === 'ADD_TO_CART_FAILED' || r.cartPrice == null,
   ).length;
 
   document.getElementById('stats').innerHTML = `
@@ -303,14 +296,11 @@ function renderInsightsFromRows() {
  * FILTERS
  */
 function applyFilters(preservePage = false) {
-  const search =
-    document.getElementById('search')?.value?.toLowerCase() || '';
+  const search = document.getElementById('search')?.value?.toLowerCase() || '';
 
-  const status =
-    document.getElementById('statusFilter')?.value || '';
+  const status = document.getElementById('statusFilter')?.value || '';
 
-  const reason =
-    document.getElementById('reasonFilter')?.value || '';
+  const reason = document.getElementById('reasonFilter')?.value || '';
 
   let rows = [...ALL_ROWS];
 
@@ -375,10 +365,12 @@ function renderPagination(totalRows, totalPages, start) {
       <button onclick="gotoPage(${totalPages})" ${atLast ? 'disabled' : ''}>»</button>
 
       <select class="pagination-size" onchange="changePageSize(this.value)">
-        ${[10, 25, 50, 100, 250].map(
-          (n) =>
-            `<option value="${n}" ${n === PAGE_SIZE ? 'selected' : ''}>${n} / page</option>`,
-        ).join('')}
+        ${[10, 25, 50, 100, 250]
+          .map(
+            (n) =>
+              `<option value="${n}" ${n === PAGE_SIZE ? 'selected' : ''}>${n} / page</option>`,
+          )
+          .join('')}
       </select>
     </div>
   `;
@@ -544,9 +536,7 @@ function renderTable(rows) {
 /**
  * EVENTS
  */
-document
-  .getElementById('search')
-  ?.addEventListener('input', applyFilters);
+document.getElementById('search')?.addEventListener('input', applyFilters);
 
 document
   .getElementById('statusFilter')
@@ -673,8 +663,12 @@ async function startRun(env) {
   }
 }
 
-document.getElementById('runStageBtn')?.addEventListener('click', () => startRun('stage'));
-document.getElementById('runProdBtn')?.addEventListener('click', () => startRun('prod'));
+document
+  .getElementById('runStageBtn')
+  ?.addEventListener('click', () => startRun('stage'));
+document
+  .getElementById('runProdBtn')
+  ?.addEventListener('click', () => startRun('prod'));
 
 refreshRunStatus();
 setInterval(refreshRunStatus, 5000);

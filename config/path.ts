@@ -6,15 +6,9 @@ import path from 'path';
 
 export const DATA_DIR = path.resolve(process.cwd(), 'data');
 
-export const RESULTS_PATH = path.resolve(
-  DATA_DIR,
-  'results.ndjson',
-);
+export const RESULTS_PATH = path.resolve(DATA_DIR, 'results.ndjson');
 
-export const SCREENSHOTS_DIR = path.resolve(
-  DATA_DIR,
-  'screenshots',
-);
+export const SCREENSHOTS_DIR = path.resolve(DATA_DIR, 'screenshots');
 
 export const SITEMAP_FAILURES_PATH = path.resolve(
   DATA_DIR,

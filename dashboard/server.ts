@@ -54,7 +54,9 @@ app.get('/api/runs/compare', (req, res) => {
   const b = String(req.query.b ?? '');
 
   if (!a || !b) {
-    res.status(400).json({ error: 'Query params a and b (runId) are required' });
+    res
+      .status(400)
+      .json({ error: 'Query params a and b (runId) are required' });
     return;
   }
 
@@ -100,11 +102,8 @@ app.get('/api/runs/compare', (req, res) => {
       improved,
       regressed,
       unchanged,
-      regressionRate: rowsB.length
-        ? regressed / rowsB.length
-        : 0,
-      stabilityDelta:
-        (statsB.successRate ?? 0) - (statsA.successRate ?? 0),
+      regressionRate: rowsB.length ? regressed / rowsB.length : 0,
+      stabilityDelta: (statsB.successRate ?? 0) - (statsA.successRate ?? 0),
     },
     reasonTrends,
   });
@@ -136,7 +135,9 @@ app.get('/api/runs/active', (_req, res) => {
 
 app.post('/api/runs/start', (req, res) => {
   if (activeRun) {
-    res.status(409).json({ error: 'A run is already in progress', active: activeRun });
+    res
+      .status(409)
+      .json({ error: 'A run is already in progress', active: activeRun });
     return;
   }
 
@@ -260,7 +261,8 @@ function statsFromRows(results: any[]) {
         failingStepCount[ev.step] = (failingStepCount[ev.step] ?? 0) + 1;
       }
       if (ev.bucket) {
-        bucketDistribution[ev.bucket] = (bucketDistribution[ev.bucket] ?? 0) + 1;
+        bucketDistribution[ev.bucket] =
+          (bucketDistribution[ev.bucket] ?? 0) + 1;
       }
     }
   }

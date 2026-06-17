@@ -106,7 +106,7 @@ bestPrice/
 
 ## Prerequisites
 
-- Node.js **>= 18** (CI uses `lts/*`)
+- Node.js **>= 20** (CI uses `lts/*`)
 - npm
 - Disk space for `data/runs/` (each archived run is a few MB on stage, more on full prod crawls)
 
@@ -309,6 +309,7 @@ GitHub Actions workflow: `.github/workflows/playwright.yml`. Four parallel jobs 
 - **unit-tests** — `npm run test` (Vitest)
 - **crawler-tests** — `npx playwright test tests/e2e/crawl.smoke.spec.ts` (contract mode — hits live site)
 - **ui-tests** — `npm run test:header`
+- **integration-tests** — `npm run test:integration`
 
 Use `CRAWL_SMOKE_STRICT=true` locally before promoting to be sure the strict-success path still works against the target product.
 

@@ -19,7 +19,7 @@
     "test:e2e": "playwright test tests/e2e",
     "test:header": "playwright test tests/header",
     "test:sitemap": "playwright test tests/e2e/sitemap.spec.ts",
-    "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e && npm run test:header",
     "allure:clean": "rm -rf allure-results allure-results-vitest allure-report-playwright allure-report-vitest",
     "test:allure:unit": "vitest run tests/unit",
     "allure:generate:unit": "allure generate allure-results-vitest --clean -o allure-report-vitest",

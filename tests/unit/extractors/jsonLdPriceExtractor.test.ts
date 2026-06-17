@@ -50,7 +50,9 @@ describe('extractOfferPriceFromHtml', () => {
   });
 
   it('returns null when JSON-LD is missing', () => {
-    expect(extractOfferPriceFromHtml('<html><body>no ld+json</body></html>')).toBeNull();
+    expect(
+      extractOfferPriceFromHtml('<html><body>no ld+json</body></html>'),
+    ).toBeNull();
   });
 
   it('extracts lowPrice from AggregateOffer', () => {

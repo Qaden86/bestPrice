@@ -40,7 +40,12 @@ export function archiveCurrentRunIfAny(): string | null {
 
 export function writeRunManifest(runId: string, startedAt: string): void {
   const results = readNdjson(RESULTS_PATH);
-  const manifest = buildManifest(runId, results, new Date().toISOString(), startedAt);
+  const manifest = buildManifest(
+    runId,
+    results,
+    new Date().toISOString(),
+    startedAt,
+  );
 
   const destDir = path.join(RUNS_DIR, runId);
   fs.mkdirSync(destDir, { recursive: true });
@@ -89,7 +94,9 @@ export function listArchivedRuns(): RunManifest[] {
       const manifestPath = path.join(RUNS_DIR, d.name, 'manifest.json');
       if (!fs.existsSync(manifestPath)) return null;
       try {
-        return JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as RunManifest;
+        return JSON.parse(
+          fs.readFileSync(manifestPath, 'utf-8'),
+        ) as RunManifest;
       } catch {
         return null;
       }

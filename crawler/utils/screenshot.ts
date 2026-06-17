@@ -4,7 +4,9 @@ import path from 'path';
 
 import { SCREENSHOTS_DIR } from '../../config/path';
 
-const SCREENSHOT_TIMEOUT_MS = Number(process.env.CRAWL_SCREENSHOT_TIMEOUT_MS ?? 8_000);
+const SCREENSHOT_TIMEOUT_MS = Number(
+  process.env.CRAWL_SCREENSHOT_TIMEOUT_MS ?? 8_000,
+);
 
 let screenshotsEnabled = true;
 

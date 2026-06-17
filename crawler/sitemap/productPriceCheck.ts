@@ -19,17 +19,35 @@ export function evaluateProductPage(
   }
 
   if (!html) {
-    return { url, status, price: null, ok: false, error: 'empty response body' };
+    return {
+      url,
+      status,
+      price: null,
+      ok: false,
+      error: 'empty response body',
+    };
   }
 
   const price = extractOfferPriceFromHtml(html);
 
   if (price === null) {
-    return { url, status, price: null, ok: false, error: 'offer price not found in JSON-LD' };
+    return {
+      url,
+      status,
+      price: null,
+      ok: false,
+      error: 'offer price not found in JSON-LD',
+    };
   }
 
   if (price <= 0) {
-    return { url, status, price, ok: false, error: `non-positive price: ${price}` };
+    return {
+      url,
+      status,
+      price,
+      ok: false,
+      error: `non-positive price: ${price}`,
+    };
   }
 
   return { url, status, price, ok: true };

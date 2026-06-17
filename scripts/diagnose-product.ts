@@ -52,10 +52,13 @@ async function main() {
   console.log('URL', url);
   console.log(JSON.stringify(dump, null, 2));
 
-  await page.locator('[data-testid="product-detail-add-to-cart"]').first().click({
-    timeout: 10_000,
-    force: true,
-  });
+  await page
+    .locator('[data-testid="product-detail-add-to-cart"]')
+    .first()
+    .click({
+      timeout: 10_000,
+      force: true,
+    });
 
   try {
     await page.waitForSelector('[data-testid="cart-item-line-total"]', {
@@ -65,9 +68,11 @@ async function main() {
     const cartLink = page.locator('[data-testid="header-cart-link"]');
     if (await cartLink.count()) {
       await cartLink.click({ timeout: 5_000 }).catch(() => {});
-      await page.waitForSelector('[data-testid="cart-item-line-total"]', {
-        timeout: 12_000,
-      }).catch(() => console.log('cart line total still not visible'));
+      await page
+        .waitForSelector('[data-testid="cart-item-line-total"]', {
+          timeout: 12_000,
+        })
+        .catch(() => console.log('cart line total still not visible'));
     }
   }
 

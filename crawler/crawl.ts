@@ -72,7 +72,9 @@ export async function crawl(page: Page, url: string): Promise<CrawlResult> {
 
     await page
       .waitForSelector(SELECTORS.pdp.price[0], { timeout: 15_000 })
-      .catch(() => page.waitForSelector(SELECTORS.pdp.price[1], { timeout: 10_000 }));
+      .catch(() =>
+        page.waitForSelector(SELECTORS.pdp.price[1], { timeout: 10_000 }),
+      );
 
     logger.log({ step: 'navigation', status: 'OK' });
   } catch (e: unknown) {
@@ -131,7 +133,11 @@ export async function crawl(page: Page, url: string): Promise<CrawlResult> {
 
   // Retry the click on a flaky button handler — only when the selector exists
   // but the click itself failed. Skip if no selector at all (won't fix itself).
-  for (let attempt = 1; attempt <= 2 && !addToCart.clicked && addToCart.selectorFound; attempt++) {
+  for (
+    let attempt = 1;
+    attempt <= 2 && !addToCart.clicked && addToCart.selectorFound;
+    attempt++
+  ) {
     logger.log({
       step: 'retry',
       status: 'INFO',
@@ -227,7 +233,12 @@ export async function crawl(page: Page, url: string): Promise<CrawlResult> {
   };
 
   if (validation.status === 'FAIL') {
-    return fail(page, base, trace, `validation-${validation.reason.toLowerCase()}`);
+    return fail(
+      page,
+      base,
+      trace,
+      `validation-${validation.reason.toLowerCase()}`,
+    );
   }
 
   return { ...base, trace };

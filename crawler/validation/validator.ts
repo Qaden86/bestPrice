@@ -96,7 +96,10 @@ function checkCart(cart: PriceExtraction): ValidationFail | null {
   return null;
 }
 
-function checkPrices(pdp: PriceExtraction, cart: PriceExtraction): ValidationFail | null {
+function checkPrices(
+  pdp: PriceExtraction,
+  cart: PriceExtraction,
+): ValidationFail | null {
   const pdpValue = parsePrice(pdp.price).value!;
   const cartValue = parsePrice(cart.price).value!;
 

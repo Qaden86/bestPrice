@@ -11,7 +11,10 @@ import {
 import { SITEMAP_FAILURES_PATH } from '../../config/path';
 import { getAppConfig } from '../../config/appConfig';
 import { ensureDataDir } from '../output/ensureDataDir';
-import { checkProductPrice, createSitemapHttpClient } from './productPriceCheck';
+import {
+  checkProductPrice,
+  createSitemapHttpClient,
+} from './productPriceCheck';
 import type { SitemapPriceCheckSummary } from './types';
 
 export type RunSitemapPriceCheckOptions = {
@@ -25,7 +28,11 @@ export async function runSitemapPriceCheck(
   options: RunSitemapPriceCheckOptions = {},
 ): Promise<SitemapPriceCheckSummary> {
   const limit =
-    options.limit === undefined ? getSitemapLimit() : options.limit === null ? undefined : options.limit;
+    options.limit === undefined
+      ? getSitemapLimit()
+      : options.limit === null
+        ? undefined
+        : options.limit;
 
   const concurrency = options.concurrency ?? getSitemapConcurrency();
   const writeFailures = options.writeFailures ?? true;
@@ -34,7 +41,9 @@ export async function runSitemapPriceCheck(
   const allItems = await getSitemapUrls(getAppConfig());
   const productItems = allItems.filter(isProductPage);
   const urls =
-    limit === undefined ? productItems.map((i) => i.url) : productItems.slice(0, limit).map((i) => i.url);
+    limit === undefined
+      ? productItems.map((i) => i.url)
+      : productItems.slice(0, limit).map((i) => i.url);
 
   console.log(
     `[sitemap] checking ${urls.length} of ${productItems.length} product URL(s) ` +
@@ -68,7 +77,9 @@ export async function runSitemapPriceCheck(
       ),
       'utf-8',
     );
-    console.error(`[sitemap] wrote ${failures.length} failure(s) to ${failuresPath}`);
+    console.error(
+      `[sitemap] wrote ${failures.length} failure(s) to ${failuresPath}`,
+    );
   }
 
   if (failures.length > 0) {
@@ -76,8 +87,11 @@ export async function runSitemapPriceCheck(
       .slice(0, 50)
       .map((f) => `  - [${f.status || 'ERR'}] ${f.url} — ${f.error}`)
       .join('\n');
-    const more = failures.length > 50 ? `\n  ...and ${failures.length - 50} more` : '';
-    console.error(`[sitemap] ${failures.length} product(s) without a valid price:\n${preview}${more}`);
+    const more =
+      failures.length > 50 ? `\n  ...and ${failures.length - 50} more` : '';
+    console.error(
+      `[sitemap] ${failures.length} product(s) without a valid price:\n${preview}${more}`,
+    );
   }
 
   return {
@@ -89,6 +103,8 @@ export async function runSitemapPriceCheck(
   };
 }
 
-export function formatSitemapFailureMessage(summary: SitemapPriceCheckSummary): string {
+export function formatSitemapFailureMessage(
+  summary: SitemapPriceCheckSummary,
+): string {
   return `${summary.failures.length} of ${summary.checked} products are missing a positive JSON-LD offer price`;
 }

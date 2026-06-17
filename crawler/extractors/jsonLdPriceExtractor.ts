@@ -59,7 +59,9 @@ function priceFromOffer(offer: Record<string, unknown>): number | null {
   return normalizePrice(raw);
 }
 
-function collectOffers(node: Record<string, unknown>): Record<string, unknown>[] {
+function collectOffers(
+  node: Record<string, unknown>,
+): Record<string, unknown>[] {
   const offers: Record<string, unknown>[] = [];
 
   if (hasOfferType(node['@type'])) {

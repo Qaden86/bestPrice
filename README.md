@@ -367,6 +367,16 @@ That's expected — partial results are kept on disk; the run is marked interrup
 - Ensure pool.acquire() is paired with pool.release() (or use acquireContext()'s release()) to avoid leaked slots that starve waiters.
 - To confirm per-job isolation: run a small sample crawl and verify no cookies/localStorage persist between URLs.
 
+### BrowserPool & rotation notes
+- Defaults: CRAWL_BROWSER_POOL_SIZE=2, CRAWL_BROWSER_ROTATE_AFTER=200.
+- Use BrowserPool.acquireContext() in workers (recommended) — it creates a fresh BrowserContext per URL and returns an idempotent release() you must call in finally blocks.
+- Rotation is atomic per-slot. If a relaunch fails, the slot is removed and an error is logged; remaining waiters will be handed other available browsers if possible.
+- If you see the pool shrinking unexpectedly, reduce concurrency and inspect logs for rotation errors.
+- When shutting down the pool, pending waiters are rejected with "browser pool closed".
+- Quick verification:
+  - CRAWL_BROWSER_POOL_SIZE=2 CRAWL_BROWSER_ROTATE_AFTER=10 npm run crawl:stage:sample
+  - Watch logs for "handed slot", "rotate START", "rotate DONE", and "closed slot" entries.
+
 ### Quick local testing & troubleshooting
 
 - Quick verification with small pool and early rotate:

@@ -1,5 +1,5 @@
 import { BrowserPool } from '../browser/browserPool';
-import { crawlWorker } from '../workers/crawlWorker';
+import { runWorkerSession } from '../workers/crawlWorker';
 import { upsertResult, flushResults } from '../output/resultStore';
 import { isShuttingDown, requestShutdown } from './shutdown';
 import { CrawlReason, CrawlResult } from '../types/CrawlResult';
@@ -42,31 +42,37 @@ export async function runConcurrentEngine(params: {
   };
 
   const worker = async () => {
-    while (!isShuttingDown()) {
-      const url = getNext();
-      if (!url) return;
+    await runWorkerSession(pool, async (session) => {
+      while (!isShuttingDown()) {
+        const url = getNext();
+        if (!url) return;
 
-      const attempt = (attempts.get(url) ?? 0) + 1;
-      attempts.set(url, attempt);
+        const attempt = (attempts.get(url) ?? 0) + 1;
+        attempts.set(url, attempt);
 
-      const result = await crawlWorker(url, pool);
+        const result = await session.crawl(url);
 
-      const canRetry =
-        !isShuttingDown() && attempt < MAX_ATTEMPTS && isRetryable(result);
+        if (result.reason === 'SHUTDOWN') {
+          return;
+        }
 
-      if (canRetry) {
-        console.log(
-          `[RETRY] ${url} (${attempt}/${MAX_ATTEMPTS}) reason=${result.reason}`,
-        );
-        retryQueue.push(url);
-        continue;
+        const canRetry =
+          !isShuttingDown() && attempt < MAX_ATTEMPTS && isRetryable(result);
+
+        if (canRetry) {
+          console.log(
+            `[RETRY] ${url} (${attempt}/${MAX_ATTEMPTS}) reason=${result.reason}`,
+          );
+          retryQueue.push(url);
+          continue;
+        }
+
+        upsertResult(result);
+
+        completed++;
+        console.log(`[PROGRESS] ${completed}/${urls.length}`);
       }
-
-      upsertResult(result);
-
-      completed++;
-      console.log(`[PROGRESS] ${completed}/${urls.length}`);
-    }
+    });
   };
 
   const workers = Array.from({ length: params.concurrency }, () =>
@@ -81,6 +87,10 @@ export async function runConcurrentEngine(params: {
 
   await flushResults();
   await pool.close();
+
+  if (isShuttingDown()) {
+    console.log(`[SHUTDOWN] Stopped after ${completed}/${urls.length} URLs`);
+  }
 }
 
 export function installShutdownHandlers(): void {

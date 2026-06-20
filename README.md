@@ -142,8 +142,12 @@ cp .env.example .env.prod
 | `CRAWL_SCREENSHOTS`           | `true` (sample) / `false` (full) | Failure screenshots. Set `true`/`false` to override the default for the current mode. |
 | `CRAWL_SCREENSHOT_TIMEOUT_MS` | `8000`                           | Viewport-only screenshot timeout                                                      |
 | `CRAWL_SMOKE_STRICT`          | `false`                          | If `true`, the E2E smoke spec asserts an OK result with matching cart price           |
+| `CRAWL_RESUME`                | `false`                          | Skip URLs already in `data/results.ndjson`; does not truncate the file                 |
+| `CRAWL_BROWSER_ROTATE_AFTER`  | `200`                            | Recreate browser context after N URLs per worker (memory hygiene)                      |
 
 Concurrency precedence: `CRAWL_CONCURRENCY` env var > environment default (`stage`/`prod`). See `config/executionConfig.ts`.
+
+Each worker **reuses one browser context** across URLs (new page + `clearCookies` per URL). Images, fonts, and media are blocked via `crawler/browser/crawlContext.ts`.
 
 ---
 
@@ -163,13 +167,14 @@ Override concurrency ad hoc:
 ```bash
 CRAWL_CONCURRENCY=8 npm run crawl:stage
 CRAWL_SCREENSHOTS=false CRAWL_CONCURRENCY=10 npm run crawl:prod:full
+CRAWL_RESUME=true CRAWL_CONCURRENCY=10 npm run crawl:prod:full   # after Ctrl-C interrupt
 ```
 
 Output:
 
 - Live stream → `data/results.ndjson`
-- Previous run is archived to `data/runs/<runId>/` (with `results.ndjson` + `manifest.json`) before each new run starts.
-- `Ctrl-C` triggers a cooperative shutdown — partial results stay on disk.
+- Previous run is archived to `data/runs/<runId>/` (with `results.ndjson` + `manifest.json`) before each new run starts — **unless** `CRAWL_RESUME=true`.
+- `Ctrl-C` triggers a cooperative shutdown — partial results stay on disk; resume with `CRAWL_RESUME=true`.
 
 ### URL-level retry
 

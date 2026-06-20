@@ -14,6 +14,7 @@ import { getAppConfig } from '../config/appConfig';
 import { RESULTS_PATH } from '../config/path';
 import { setScreenshotsEnabled } from '../crawler/utils/screenshot';
 import { flushResults } from '../crawler/output/resultStore';
+import { loadCompletedUrlSet } from '../crawler/output/resume';
 import {
   archiveCurrentRunIfAny,
   ensureRunsDir,
@@ -23,13 +24,19 @@ import {
 async function main(): Promise<void> {
   console.log('[ENTRY] crawler started');
 
-  ensureRunsDir();
-  const archived = archiveCurrentRunIfAny();
-  if (archived) {
-    console.log('[ARCHIVE] previous run saved as', archived);
-  }
+  const resume = process.env.CRAWL_RESUME === 'true';
 
-  fs.writeFileSync(RESULTS_PATH, '', 'utf-8');
+  ensureRunsDir();
+
+  if (!resume) {
+    const archived = archiveCurrentRunIfAny();
+    if (archived) {
+      console.log('[ARCHIVE] previous run saved as', archived);
+    }
+    fs.writeFileSync(RESULTS_PATH, '', 'utf-8');
+  } else {
+    console.log('[RESUME] continuing from existing', RESULTS_PATH);
+  }
 
   const startedAt = new Date().toISOString();
   const runId = startedAt.replace(/[:.]/g, '-');
@@ -41,17 +48,39 @@ async function main(): Promise<void> {
 
   setScreenshotsEnabled(runtime.screenshots);
 
-  console.log('[CONFIG]', { ...runtime, baseUrl: app.baseUrl, runId });
+  console.log('[CONFIG]', {
+    ...runtime,
+    baseUrl: app.baseUrl,
+    runId,
+    resume,
+    contextReuse: true,
+    blockAssets: ['image', 'font', 'media'],
+  });
 
   const allUrls = await getSitemapUrls(app);
   const productUrls = allUrls.filter(isProductPage).map((item) => item.url);
-  const urlsToProcess = selectUrls(productUrls, runtime);
+  let urlsToProcess = selectUrls(productUrls, runtime);
+
+  if (resume) {
+    const completed = loadCompletedUrlSet(RESULTS_PATH);
+    const before = urlsToProcess.length;
+    urlsToProcess = urlsToProcess.filter((url) => !completed.has(url));
+    console.log('[RESUME]', {
+      alreadyDone: before - urlsToProcess.length,
+      remaining: urlsToProcess.length,
+    });
+  }
 
   console.log('[INGESTION]', {
     total: allUrls.length,
     product: productUrls.length,
     selected: urlsToProcess.length,
   });
+
+  if (urlsToProcess.length === 0) {
+    console.log('[DONE] nothing to crawl');
+    return;
+  }
 
   await runConcurrentEngine({
     urls: urlsToProcess,

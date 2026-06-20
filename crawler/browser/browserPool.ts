@@ -1,13 +1,8 @@
 /**
  * BrowserPool
  *
- * Reuses browser instances only.
- * Contexts are intentionally NOT reused.
- *
- * This provides:
- * - stable isolation
- * - predictable Playwright lifecycle
- * - safe ecommerce crawling
+ * Reuses browser instances; each worker reuses one context across URLs
+ * (see crawlWorker + crawlContext). Contexts are NOT shared between workers.
  *
  * Each browser is periodically rotated (close + relaunch) to bound
  * Playwright's per-browser Node-side bookkeeping (CDP channel state,

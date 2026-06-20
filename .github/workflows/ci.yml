@@ -4,6 +4,8 @@ on:
   push:
     branches: [main, master]
   pull_request:
+    branches: [main, master]
+  workflow_dispatch:
 
 jobs:
   unit:
@@ -32,10 +34,11 @@ jobs:
       - run: npm run test:sitemap
         env:
           SITEMAP_LIMIT: 25
+      - run: npx playwright test tests/e2e/crawl.smoke.spec.ts
 
   integration:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

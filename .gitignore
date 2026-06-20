@@ -15,3 +15,12 @@ data/results.json
 data/*.log
 .playwright-mcp/
 storage/
+
+# Allure reports (local test runs)
+allure-results/
+allure-results-vitest/
+allure-report-playwright/
+allure-report-vitest/
+
+# Local duplicate workspace (not part of this repo)
+bestPriceClean/

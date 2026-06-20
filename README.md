@@ -304,14 +304,15 @@ Adding a new page object:
 
 ## CI/CD
 
-GitHub Actions workflow: `.github/workflows/playwright.yml`. Four parallel jobs on push/PR to `main`:
+Single GitHub Actions workflow: `.github/workflows/ci.yml`. On push/PR to `main`:
 
-- **unit-tests** — `npm run test` (Vitest)
-- **crawler-tests** — `npx playwright test tests/e2e/crawl.smoke.spec.ts` (contract mode — hits live site)
-- **ui-tests** — `npm run test:header`
-- **integration-tests** — `npm run test:integration`
+| Job | What runs |
+|-----|-----------|
+| **unit** | `npm run typecheck` + `npm run test:unit` (Vitest) |
+| **playwright** | header UI, sitemap smoke (`SITEMAP_LIMIT=25`), crawl contract smoke |
+| **integration** | Full browser crawl (`tests/integration`) — **manual only** via *Actions → CI → Run workflow* |
 
-Use `CRAWL_SMOKE_STRICT=true` locally before promoting to be sure the strict-success path still works against the target product.
+Use `CRAWL_SMOKE_STRICT=true` locally before promoting to verify strict success against the target product.
 
 ---
 

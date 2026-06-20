@@ -15,7 +15,7 @@
  * Node on long crawls. Tune with CRAWL_BROWSER_ROTATE_AFTER.
  */
 
-import { chromium, Browser } from 'playwright';
+import { chromium, Browser, BrowserContext } from 'playwright';
 
 type PooledBrowser = {
   browser: Browser;
@@ -25,6 +25,9 @@ type PooledBrowser = {
 
 const DEFAULT_ROTATE_AFTER = 200;
 
+/**
+ * Parse rotation count from env.
+ */
 function parseRotateAfter(): number {
   const raw = process.env.CRAWL_BROWSER_ROTATE_AFTER;
   if (!raw) return DEFAULT_ROTATE_AFTER;
@@ -32,12 +35,23 @@ function parseRotateAfter(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_ROTATE_AFTER;
 }
 
+/**
+ * Parse pool size from env.
+ */
+function parsePoolSize(): number {
+  const raw = process.env.CRAWL_BROWSER_POOL_SIZE;
+  if (!raw) return 2;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 2;
+}
+
 export class BrowserPool {
   private pool: PooledBrowser[] = [];
   private waiters: ((browser: Browser) => void)[] = [];
   private readonly rotateAfter = parseRotateAfter();
 
-  constructor(private size = 2) {}
+  // Use env-driven default so README docs match runtime.
+  constructor(private size = parsePoolSize()) {}
 
   private launch(): Promise<Browser> {
     return chromium.launch({
@@ -57,7 +71,7 @@ export class BrowserPool {
   }
 
   /**
-   * Acquire browser instance
+   * Acquire browser instance (keeps existing API for compatibility)
    */
   async acquire(): Promise<Browser> {
     const available = this.pool.find((b) => !b.inUse);
@@ -70,6 +84,36 @@ export class BrowserPool {
     return new Promise((resolve) => {
       this.waiters.push(resolve);
     });
+  }
+
+  /**
+   * Acquire a fresh BrowserContext for a job.
+   * Returns { context, browser, release } where release() closes the context
+   * and returns the browser to the pool. This enforces per-job isolation.
+   */
+  async acquireContext(): Promise<{
+    context: BrowserContext;
+    browser: Browser;
+    release: () => Promise<void>;
+  }> {
+    const browser = await this.acquire();
+    // create a fresh context per job to ensure isolation of cookies/localStorage/permissions
+    const context = await browser.newContext();
+
+    let released = false;
+    const release = async (): Promise<void> => {
+      if (released) return;
+      released = true;
+      try {
+        await context.close();
+      } catch {
+        /* best-effort */
+      }
+      // return browser back to pool
+      this.release(browser);
+    };
+
+    return { context, browser, release };
   }
 
   /**

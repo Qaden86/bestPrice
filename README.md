@@ -304,14 +304,26 @@ Adding a new page object:
 
 ## CI/CD
 
-GitHub Actions workflow: `.github/workflows/playwright.yml`. Four parallel jobs on push/PR to `main`:
+Single GitHub Actions workflow: `.github/workflows/ci.yml`.
 
-- **unit-tests** — `npm run test` (Vitest)
-- **crawler-tests** — `npx playwright test tests/e2e/crawl.smoke.spec.ts` (contract mode — hits live site)
-- **ui-tests** — `npm run test:header`
-- **integration-tests** — `npm run test:integration`
+**Integration tests are intentionally excluded from PR gating because of flakiness on live data sources. Smoke coverage remains mandatory on every PR.**
 
-Use `CRAWL_SMOKE_STRICT=true` locally before promoting to be sure the strict-success path still works against the target product.
+### PR gating (every push / pull request)
+
+| Job | What runs |
+|-----|-----------|
+| **unit** | `npm run typecheck` + `npm run test:unit` (Vitest) |
+| **playwright** | header UI, sitemap smoke (`SITEMAP_LIMIT=25`), crawl contract smoke (`tests/e2e/crawl.smoke.spec.ts`) |
+
+The `integration` job is **skipped** on push/PR — this is deliberate, not a misconfiguration.
+
+### Manual / pre-release
+
+| Job | How to run |
+|-----|------------|
+| **integration** | GitHub → *Actions* → *CI* → *Run workflow* — full browser crawl with strict `OK` + price match (`tests/integration`) |
+
+Use `CRAWL_SMOKE_STRICT=true` locally before promoting to verify strict success against the target product.
 
 ---
 

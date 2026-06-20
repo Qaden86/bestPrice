@@ -1,3 +1,9 @@
+# CI contract (see README § CI/CD):
+# - unit + playwright: required on every push/PR (PR gating).
+# - integration: intentionally excluded from PR gating — flaky on live prod data.
+#   Run manually: Actions → CI → Run workflow. Smoke (header, sitemap, crawl contract)
+#   remains mandatory on every PR.
+
 name: CI
 
 on:
@@ -38,6 +44,7 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    # Not PR-gated: strict live-site crawl (OK + price match). See README.
     if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4

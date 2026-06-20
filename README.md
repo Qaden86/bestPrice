@@ -304,13 +304,24 @@ Adding a new page object:
 
 ## CI/CD
 
-Single GitHub Actions workflow: `.github/workflows/ci.yml`. On push/PR to `main`:
+Single GitHub Actions workflow: `.github/workflows/ci.yml`.
+
+**Integration tests are intentionally excluded from PR gating because of flakiness on live data sources. Smoke coverage remains mandatory on every PR.**
+
+### PR gating (every push / pull request)
 
 | Job | What runs |
 |-----|-----------|
 | **unit** | `npm run typecheck` + `npm run test:unit` (Vitest) |
-| **playwright** | header UI, sitemap smoke (`SITEMAP_LIMIT=25`), crawl contract smoke |
-| **integration** | Full browser crawl (`tests/integration`) — **manual only** via *Actions → CI → Run workflow* |
+| **playwright** | header UI, sitemap smoke (`SITEMAP_LIMIT=25`), crawl contract smoke (`tests/e2e/crawl.smoke.spec.ts`) |
+
+The `integration` job is **skipped** on push/PR — this is deliberate, not a misconfiguration.
+
+### Manual / pre-release
+
+| Job | How to run |
+|-----|------------|
+| **integration** | GitHub → *Actions* → *CI* → *Run workflow* — full browser crawl with strict `OK` + price match (`tests/integration`) |
 
 Use `CRAWL_SMOKE_STRICT=true` locally before promoting to verify strict success against the target product.
 

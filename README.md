@@ -142,6 +142,8 @@ cp .env.example .env.prod
 | `CRAWL_SCREENSHOTS`           | `true` (sample) / `false` (full) | Failure screenshots. Set `true`/`false` to override the default for the current mode. |
 | `CRAWL_SCREENSHOT_TIMEOUT_MS` | `8000`                           | Viewport-only screenshot timeout                                                      |
 | `CRAWL_SMOKE_STRICT`          | `false`                          | If `true`, the E2E smoke spec asserts an OK result with matching cart price           |
+| `CRAWL_BROWSER_POOL_SIZE`     | `2`                              | Number of Playwright Browser instances to keep open in the pool                       |
+| `CRAWL_BROWSER_ROTATE_AFTER`  | `200`                            | Relaunch a Browser instance after this many jobs to bound per-browser resource growth |
 
 Concurrency precedence: `CRAWL_CONCURRENCY` env var > environment default (`stage`/`prod`). See `config/executionConfig.ts`.
 
@@ -358,3 +360,16 @@ It counts both `ADD_TO_CART_FAILED` rows and rows missing a `cartPrice`. If you 
 ### Ctrl-C left a half-written `results.ndjson`
 
 That's expected — partial results are kept on disk; the run is marked interrupted and won't be archived. Re-run when you're ready.
+
+### BrowserPool issues
+
+- Browser rotation is best-effort. If a relaunch fails the slot is removed and an error is logged — reduce concurrency or inspect logs if the pool shrinks unexpectedly.
+- Ensure pool.acquire() is paired with pool.release() (or use acquireContext()'s release()) to avoid leaked slots that starve waiters.
+- To confirm per-job isolation: run a small sample crawl and verify no cookies/localStorage persist between URLs.
+
+### Quick local testing & troubleshooting
+
+- Quick verification with small pool and early rotate:
+  - CRAWL_BROWSER_POOL_SIZE=2 CRAWL_BROWSER_ROTATE_AFTER=10 npm run crawl:stage:sample
+  - Verify logs show contexts being created/closed per job and browsers being relaunched after ~10 jobs.
+- Ensure workers call BrowserPool.acquireContext() (preferred) or call browser.newContext() per job and always close the context in finally blocks.

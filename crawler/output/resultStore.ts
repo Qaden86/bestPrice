@@ -7,23 +7,21 @@ import type { CrawlResult } from '../types/CrawlResult';
 export const resultBus = new EventEmitter();
 
 const writeQueue: string[] = [];
-let drainActive = false;
+let drainPromise: Promise<void> | null = null;
 
-async function drainQueue(): Promise<void> {
-  if (drainActive) return;
-  drainActive = true;
-
-  try {
-    while (writeQueue.length > 0) {
-      const batch = writeQueue.splice(0, 100).join('');
-      await fsp.appendFile(RESULTS_PATH, batch, 'utf-8');
-    }
-  } finally {
-    drainActive = false;
-    if (writeQueue.length > 0) {
-      void drainQueue();
-    }
+function drainQueue(): Promise<void> {
+  if (!drainPromise) {
+    drainPromise = (async () => {
+      while (writeQueue.length > 0) {
+        const batch = writeQueue.splice(0, 100).join('');
+        await fsp.appendFile(RESULTS_PATH, batch, 'utf-8');
+      }
+    })().finally(() => {
+      drainPromise = null;
+      if (writeQueue.length > 0) void drainQueue();
+    });
   }
+  return drainPromise;
 }
 
 export function upsertResult(result: CrawlResult): void {
@@ -39,7 +37,11 @@ export function upsertResult(result: CrawlResult): void {
 }
 
 export function flushResults(): Promise<void> {
-  return drainQueue();
+  return (async () => {
+    while (drainPromise || writeQueue.length > 0) {
+      await drainQueue();
+    }
+  })();
 }
 
 export function pendingWriteCount(): number {

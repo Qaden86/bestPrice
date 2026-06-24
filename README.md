@@ -139,6 +139,12 @@ cp .env.example .env.prod
 | `EXECUTION_MODE`              | `full`                           | `full` or `sample`                                                                    |
 | `SAMPLE_SIZE`                 | `100`                            | URLs to crawl in sample mode                                                          |
 | `CRAWL_CONCURRENCY`           | `3` (stage) / `5` (prod)         | Worker count                                                                          |
+| `CRAWL_BROWSER_POOL_SIZE`     | worker count                     | Reused Chromium processes, capped at worker concurrency                               |
+| `CRAWL_JOB_TIMEOUT_MS`        | `120000`                         | Total deadline for one crawl attempt                                                  |
+| `CRAWL_LEASE_TIMEOUT_MS`      | `150000`                         | Scheduler recovery threshold; keep above the job deadline                             |
+| `CRAWL_RUN_RETENTION`         | `50`                             | Number of archived runs retained locally                                              |
+| `SITEMAP_REQUEST_TIMEOUT_MS`  | `15000`                          | Sitemap HTTP request timeout                                                          |
+| `DASHBOARD_HOST`              | `127.0.0.1`                      | Dashboard bind address; localhost by default                                          |
 | `CRAWL_SCREENSHOTS`           | `true` (sample) / `false` (full) | Failure screenshots. Set `true`/`false` to override the default for the current mode. |
 | `CRAWL_SCREENSHOT_TIMEOUT_MS` | `8000`                           | Viewport-only screenshot timeout                                                      |
 | `CRAWL_SMOKE_STRICT`          | `false`                          | If `true`, the E2E smoke spec asserts an OK result with matching cart price           |
@@ -173,7 +179,7 @@ Output:
 
 ### URL-level retry
 
-The engine retries each URL up to **3 attempts** when it fails with a transient reason (`NAVIGATION_FAILED`, `CART_NOT_READY`, `CRAWL_FAILED`, `INTERNAL_ERROR`). Non-transient failures (`PRICE_MISMATCH`, `SELECTOR_NOT_FOUND`, `MISSING_PRICE`, `PRICE_IS_ZERO`, `ADD_TO_CART_FAILED`) are not retried — they reflect real product/page state. See `crawler/engine/concurrentEngine.ts`.
+The engine retries each URL up to **3 attempts** when it fails with a transient reason (`NAVIGATION_FAILED`, `CART_NOT_READY`, `CRAWL_FAILED`, `INTERNAL_ERROR`). Each attempt has a total deadline and a unique scheduler lease, so an expired attempt cannot finalize a newer retry. Non-transient failures (`PRICE_MISMATCH`, `SELECTOR_NOT_FOUND`, `MISSING_PRICE`, `PRICE_IS_ZERO`, `ADD_TO_CART_FAILED`) are not retried.
 
 ### Sitemap-only price audit
 

@@ -16,3 +16,8 @@ export const SITEMAP_FAILURES_PATH = path.resolve(
 );
 
 export const RUNS_DIR = path.resolve(DATA_DIR, 'runs');
+
+export const ARCHIVE_MARKER_PATH = path.resolve(
+  DATA_DIR,
+  '.archived-result.json',
+);

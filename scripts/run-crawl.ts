@@ -20,6 +20,7 @@ import { flushResults } from '../crawler/output/resultStore';
 import {
   archiveCurrentRunIfAny,
   ensureRunsDir,
+  pruneArchivedRuns,
   writeRunManifest,
 } from '../crawler/output/runArchive';
 
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
   console.log('[ENTRY] crawler started');
 
   ensureRunsDir();
+  pruneArchivedRuns(Number(process.env.CRAWL_RUN_RETENTION ?? 50));
 
   const archived = archiveCurrentRunIfAny();
   if (archived) {

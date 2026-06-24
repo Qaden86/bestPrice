@@ -77,8 +77,8 @@ function parseConcurrency(env: Environment): number {
 
   if (override) {
     const parsed = Number(override);
-    if (!Number.isNaN(parsed) && parsed > 0) {
-      return parsed;
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return Math.min(parsed, 50);
     }
   }
 
@@ -120,10 +120,15 @@ export function getExecutionConfig(): ExecutionConfig {
   const env = parseEnv();
   const mode = parseMode();
 
+  const sampleSize = parseSampleSize(mode);
+
   return {
     env,
     mode,
-    sampleSize: parseSampleSize(mode),
+    sampleSize:
+      sampleSize === undefined
+        ? undefined
+        : Math.max(1, Math.floor(sampleSize)),
     concurrency: parseConcurrency(env),
     screenshots: parseScreenshots(mode),
   };

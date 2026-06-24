@@ -12,7 +12,7 @@ describe('SchedulerV421 lease ownership', () => {
       const firstLease = scheduler.getNext();
       expect(firstLease).not.toBeNull();
 
-      vi.advanceTimersByTime(60_001);
+      vi.advanceTimersByTime(150_001);
       scheduler.tickWatchdog(Date.now());
 
       vi.advanceTimersByTime(2_000);
@@ -32,5 +32,20 @@ describe('SchedulerV421 lease ownership', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('deduplicates repeated URLs without corrupting ready counts', () => {
+    const scheduler = new SchedulerV421([
+      'https://example.test/product',
+      'https://example.test/product',
+    ]);
+
+    const lease = scheduler.getNext();
+    expect(lease).not.toBeNull();
+    expect(scheduler.getNext()).toBeNull();
+    expect(scheduler.complete(lease!.url, lease!.leaseId, true, false)).toBe(
+      true,
+    );
+    expect(scheduler.isIdle()).toBe(true);
   });
 });

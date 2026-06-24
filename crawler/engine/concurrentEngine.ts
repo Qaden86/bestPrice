@@ -24,7 +24,7 @@ import type { CrawlReason, CrawlResult } from '../types/CrawlResult';
 /* ---------------- CONFIG ---------------- */
 
 const BUCKET_MS = 1000;
-const LEASE_TIMEOUT_MS = 60_000;
+const LEASE_TIMEOUT_MS = Number(process.env.CRAWL_LEASE_TIMEOUT_MS ?? 150_000);
 const MAX_ATTEMPTS = 3;
 
 const RETRYABLE_REASONS: ReadonlySet<CrawlReason> = new Set<CrawlReason>([
@@ -111,6 +111,7 @@ export class SchedulerV421 {
   /* ---------------- TASK CREATE ---------------- */
 
   private add(url: string, delay = 0) {
+    if (this.tasks.has(url)) return;
     const now = this.now();
 
     const t: Task = {
@@ -274,9 +275,19 @@ export async function runConcurrentEngine(params: {
   urls: (string | { url: string })[];
   concurrency: number;
 }) {
+  if (!Number.isInteger(params.concurrency) || params.concurrency < 1) {
+    throw new Error('concurrency must be a positive integer');
+  }
   const urls = params.urls.map((u) => (typeof u === 'string' ? u : u.url));
 
-  const pool = await createBrowserPoolInstance(params.concurrency);
+  const configuredPoolSize = Number(
+    process.env.CRAWL_BROWSER_POOL_SIZE ?? params.concurrency,
+  );
+  const poolSize =
+    Number.isInteger(configuredPoolSize) && configuredPoolSize > 0
+      ? Math.min(configuredPoolSize, params.concurrency)
+      : params.concurrency;
+  const pool = createBrowserPoolInstance(poolSize);
   if (!validateAsBrowserPool(pool)) throw new Error('Invalid pool');
   if (pool.init) await pool.init();
 
@@ -327,6 +338,11 @@ export async function runConcurrentEngine(params: {
 
       if (finalResult) {
         upsertResult(result);
+        const stats = scheduler.stats();
+        console.log(
+          `[PROGRESS] ${stats.done + stats.dead}/${urls.length} ` +
+            `(ok=${stats.done} fail=${stats.dead})`,
+        );
       }
     }
   });

@@ -514,7 +514,7 @@ export async function crawlWorker(
 
   const base = {
     url,
-    status: 'ERROR' as 'OK' | 'ERROR',
+    status: 'FAIL' as 'OK' | 'FAIL',
     reason: 'INIT' as string,
     selector: null as string | null,
     detail: null as string | null,
@@ -547,8 +547,8 @@ export async function crawlWorker(
         return null;
       });
     if (!resp) {
-      base.status = 'ERROR';
-      base.reason = 'NO_RESPONSE';
+      base.status = 'FAIL';
+      base.reason = 'NAVIGATION_FAILED';
       pushTrace(trace, 'no_response', 'ERROR');
       return base as unknown as CrawlResult;
     }
@@ -685,13 +685,45 @@ export async function crawlWorker(
         ? Math.abs(cartPrice - pdpPrice) < 0.01
         : false;
 
-    base.status = 'OK';
-    base.reason = 'OK';
+    base.status = 'FAIL';
+    base.reason = 'INTERNAL_ERROR';
     base.selector = usedSelector;
     base.detail = added ? 'added_to_cart' : null;
     base.pdpPrice = pdpPrice;
     base.cartPrice = cartPrice;
     base.match = match;
+
+    if (pdpPrice == null) {
+      base.reason = 'MISSING_PRICE';
+      base.detail = 'pdp';
+      base.selector = usedSelector ?? PDP_SELECTORS[0] ?? null;
+      pushTrace(trace, 'validation', 'ERROR', 'MISSING_PRICE', {
+        detail: 'pdp',
+      });
+    } else if (!added) {
+      base.reason = 'ADD_TO_CART_FAILED';
+      base.detail = 'add_to_cart';
+      pushTrace(trace, 'validation', 'ERROR', 'ADD_TO_CART_FAILED');
+    } else if (cartPrice == null) {
+      base.reason = 'MISSING_PRICE';
+      base.detail = 'cart';
+      base.selector = CART_PRICE_SELECTORS[0] ?? null;
+      pushTrace(trace, 'validation', 'ERROR', 'MISSING_PRICE', {
+        detail: 'cart',
+      });
+    } else if (!match) {
+      base.reason = 'PRICE_MISMATCH';
+      base.detail = 'cart';
+      pushTrace(trace, 'validation', 'ERROR', 'PRICE_MISMATCH', {
+        pdpPrice,
+        cartPrice,
+      });
+    } else {
+      base.status = 'OK';
+      base.reason = 'OK';
+      base.detail = 'added_to_cart';
+      pushTrace(trace, 'validation', 'OK', 'OK');
+    }
 
     // cleanup
     try {
@@ -731,8 +763,9 @@ export async function crawlWorker(
         await slot.browser.close();
       } catch {}
     }
-    base.status = 'ERROR';
-    base.reason = String(err?.message ?? err);
+    base.status = 'FAIL';
+    base.reason = 'CRAWL_FAILED';
+    base.detail = String(err?.message ?? err);
     return base as unknown as CrawlResult;
   }
 }

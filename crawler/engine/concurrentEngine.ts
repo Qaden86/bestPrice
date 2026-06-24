@@ -18,13 +18,27 @@ import {
 } from '../browser/browserPool';
 import crawlWorker from '../workers/crawlWorker';
 import { upsertResult, flushResults } from '../output/resultStore';
-import type { CrawlResult } from '../types/CrawlResult';
+import { isShuttingDown, requestShutdown } from './shutdown';
+import type { CrawlReason, CrawlResult } from '../types/CrawlResult';
 
 /* ---------------- CONFIG ---------------- */
 
 const BUCKET_MS = 1000;
 const LEASE_TIMEOUT_MS = 60_000;
 const MAX_ATTEMPTS = 3;
+
+const RETRYABLE_REASONS: ReadonlySet<CrawlReason> = new Set<CrawlReason>([
+  'NAVIGATION_FAILED',
+  'CART_NOT_READY',
+  'CRAWL_FAILED',
+  'INTERNAL_ERROR',
+]);
+
+function isRetryable(result: CrawlResult): boolean {
+  if (result.status === 'OK') return false;
+  if (result.reason === 'SHUTDOWN') return false;
+  return RETRYABLE_REASONS.has(result.reason);
+}
 
 /* ---------------- TYPES ---------------- */
 
@@ -145,27 +159,35 @@ class SchedulerV421 {
 
   getNext(): string | null {
     const now = this.now();
+    const currentBucket = this.bucketOf(now);
+    const dueBuckets = Array.from(this.buckets.keys())
+      .filter((bucket) => bucket <= currentBucket)
+      .sort((a, b) => a - b);
 
-    const bucket = this.bucketOf(now);
-    const set = this.buckets.get(bucket);
-    if (!set) return null;
+    for (const bucket of dueBuckets) {
+      const set = this.buckets.get(bucket);
+      if (!set) continue;
 
-    for (const url of set) {
-      const t = this.tasks.get(url);
-      if (!t) continue;
-      if (t.state !== State.READY) continue;
-      if (t.nextRunAt > now) continue;
+      for (const url of set) {
+        const t = this.tasks.get(url);
+        if (!t) continue;
+        if (t.state !== State.READY) continue;
+        if (t.nextRunAt > now) continue;
 
-      set.delete(url);
-      t.inBucket = undefined;
+        set.delete(url);
+        if (set.size === 0) this.buckets.delete(bucket);
+        t.inBucket = undefined;
 
-      t.state = State.LEASED;
-      t.leasedAt = now;
+        t.state = State.LEASED;
+        t.leasedAt = now;
 
-      this.readyCount--;
-      this.leasedCount++;
+        this.readyCount--;
+        this.leasedCount++;
 
-      return url;
+        return url;
+      }
+
+      if (set.size === 0) this.buckets.delete(bucket);
     }
 
     return null;
@@ -173,21 +195,13 @@ class SchedulerV421 {
 
   /* ---------------- RETRY ---------------- */
 
-  scheduleRetry(url: string): boolean {
+  private scheduleRetry(url: string): void {
     const t = this.tasks.get(url);
-    if (!t) return false;
-
-    if (t.attempts >= MAX_ATTEMPTS) {
-      t.state = State.DEAD;
-      this.deadCount++;
-      return false;
-    }
+    if (!t) return;
 
     if (t.inBucket !== undefined) {
       this.bucketRemove(t.inBucket, url);
     }
-
-    t.attempts++;
 
     const now = this.now();
     const delay = 1000 * Math.pow(2, t.attempts);
@@ -200,24 +214,31 @@ class SchedulerV421 {
     t.inBucket = t.bucket;
 
     this.readyCount++;
-
-    return true;
   }
 
   /* ---------------- COMPLETE ---------------- */
 
-  complete(url: string, ok: boolean) {
+  complete(url: string, ok: boolean, retryable: boolean): boolean {
     const t = this.tasks.get(url);
-    if (!t || t.state !== State.LEASED) return;
+    if (!t || t.state !== State.LEASED) return true;
 
     this.leasedCount--;
+    t.attempts++;
 
     if (ok) {
       t.state = State.DONE;
       this.doneCount++;
-    } else {
-      this.scheduleRetry(url);
+      return true;
     }
+
+    if (retryable && t.attempts < MAX_ATTEMPTS && !isShuttingDown()) {
+      this.scheduleRetry(url);
+      return false;
+    }
+
+    t.state = State.DEAD;
+    this.deadCount++;
+    return true;
   }
 
   isIdle(): boolean {
@@ -249,7 +270,7 @@ export async function runConcurrentEngine(params: {
   const scheduler = new SchedulerV421(urls);
 
   const workers = Array.from({ length: params.concurrency }, async () => {
-    while (true) {
+    while (!isShuttingDown()) {
       scheduler.tickWatchdog(Date.now());
 
       const url = scheduler.getNext();
@@ -283,9 +304,13 @@ export async function runConcurrentEngine(params: {
         };
       }
 
-      scheduler.complete(url, result.status === 'OK');
+      const finalResult = scheduler.complete(
+        url,
+        result.status === 'OK',
+        isRetryable(result),
+      );
 
-      if (result.status === 'OK') {
+      if (finalResult) {
         upsertResult(result);
       }
     }
@@ -297,4 +322,15 @@ export async function runConcurrentEngine(params: {
   } finally {
     if (pool.close) await pool.close();
   }
+}
+
+export function installShutdownHandlers(): void {
+  const onSignal = () => {
+    if (isShuttingDown()) return;
+    console.log('\n[SHUTDOWN] stopping workers...');
+    requestShutdown();
+  };
+
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
 }

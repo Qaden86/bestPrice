@@ -3,7 +3,10 @@ import fs from 'fs';
 import { getSitemapUrls } from '../crawler/ingestion/sitemapFetcher';
 import { isProductPage } from '../crawler/ingestion/urlFilter';
 
-import { runConcurrentEngine } from '../crawler/engine/concurrentEngine';
+import {
+  runConcurrentEngine,
+  installShutdownHandlers,
+} from '../crawler/engine/concurrentEngine';
 import { isShuttingDown } from '../crawler/engine/shutdown';
 
 import { selectUrls } from '../crawler/engine/selectUrls';
@@ -34,6 +37,8 @@ async function main(): Promise<void> {
 
   const startedAt = new Date().toISOString();
   const runId = startedAt.replace(/[:.]/g, '-');
+
+  installShutdownHandlers();
 
   const runtime = getExecutionConfig();
   const app = getAppConfig();

@@ -24,9 +24,9 @@ export default defineConfig({
   resolve: {
     alias: {
       /**
-      * Production-grade aliasing:
-      * prevents fragile relative imports like ../../../../
-      */
+       * Production-grade aliasing:
+       * prevents fragile relative imports like ../../../../
+       */
       '@crawler': resolve(__dirname, './crawler'),
       '@tests': resolve(__dirname, './tests'),
     },

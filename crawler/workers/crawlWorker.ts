@@ -725,48 +725,20 @@ export async function crawlWorker(
       pushTrace(trace, 'validation', 'OK', 'OK');
     }
 
-    // cleanup
-    try {
-      const pages = slot.context.pages();
-      for (const p of pages) {
-        try {
-          await p.close();
-        } catch {}
-      }
-    } catch {}
-
-    if (pool && slot) {
-      await pool.releaseContext(slot).catch(() => {});
-    }
-    if (!pool && slot && usedLocalBrowser) {
-      try {
-        await slot.context.close();
-      } catch {}
-      try {
-        await slot.browser.close();
-      } catch {}
-    }
-
     return base as unknown as CrawlResult;
   } catch (err: any) {
     pushTrace(trace, 'error', 'ERROR', String(err?.message ?? err));
-    if (pool && slot) {
-      try {
-        await pool.releaseContext(slot);
-      } catch {}
-    }
-    if (!pool && slot && usedLocalBrowser) {
-      try {
-        await slot.context.close();
-      } catch {}
-      try {
-        await slot.browser.close();
-      } catch {}
-    }
     base.status = 'FAIL';
     base.reason = 'CRAWL_FAILED';
     base.detail = String(err?.message ?? err);
     return base as unknown as CrawlResult;
+  } finally {
+    if (pool && slot) {
+      await pool.releaseContext(slot).catch(() => {});
+    } else if (slot && usedLocalBrowser) {
+      await slot.context.close().catch(() => {});
+      await slot.browser.close().catch(() => {});
+    }
   }
 }
 

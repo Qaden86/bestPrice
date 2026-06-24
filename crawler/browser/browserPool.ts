@@ -33,6 +33,10 @@ export type BrowserPoolInstance = {
   close: () => Promise<void>;
 };
 
+export type BrowserPoolOptions = {
+  waitTimeoutMs?: number;
+};
+
 type SlotState =
   | 'initial'
   | 'free'
@@ -60,9 +64,12 @@ type Slot = {
   browserVersion: number;
 };
 
-export function createBrowserPoolInstance(size = 1): BrowserPoolInstance {
+export function createBrowserPoolInstance(
+  size = 1,
+  options: BrowserPoolOptions = {},
+): BrowserPoolInstance {
   const MAX_WAITERS = 1000;
-  const WAIT_TIMEOUT_MS = 30000;
+  const WAIT_TIMEOUT_MS = options.waitTimeoutMs ?? 30000;
   const CONTEXT_CREATE_TIMEOUT_MS = 10000;
   const SHUTDOWN_WAIT_MS = 30000;
 
@@ -476,7 +483,10 @@ export function createBrowserPoolInstance(size = 1): BrowserPoolInstance {
       waiters.cancelQueued(ticket.id);
     }, WAIT_TIMEOUT_MS);
 
-    ticket.promise.finally(() => clearTimeout(timer));
+    void ticket.promise.then(
+      () => clearTimeout(timer),
+      () => clearTimeout(timer),
+    );
 
     return ticket.promise;
   }

@@ -48,6 +48,29 @@ describe('resultStore', () => {
     expect(appendFile).toHaveBeenCalledTimes(2);
     expect(pendingWriteCount()).toBe(0);
   });
+
+  it('retains a failed batch and lets flushResults retry it', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    appendFile
+      .mockRejectedValueOnce(new Error('disk full'))
+      .mockResolvedValueOnce(undefined);
+
+    try {
+      upsertResult(result('https://example.test/retry'));
+      await vi.waitFor(() => expect(appendFile).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(consoleError).toHaveBeenCalled());
+
+      expect(pendingWriteCount()).toBe(1);
+      await flushResults();
+
+      expect(appendFile).toHaveBeenCalledTimes(2);
+      expect(pendingWriteCount()).toBe(0);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 function result(url: string) {

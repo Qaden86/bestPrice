@@ -77,6 +77,16 @@ export function normalizeUrls(urls: (string | { url: string })[]): string[] {
   ];
 }
 
+export function resolvePoolSize(
+  concurrency: number,
+  configured?: string,
+): number {
+  const parsed = Number(configured);
+  return Number.isInteger(parsed) && parsed > 0
+    ? Math.min(parsed, concurrency)
+    : concurrency;
+}
+
 /* ---------------- SCHEDULER ---------------- */
 
 export class SchedulerV421 {
@@ -318,77 +328,73 @@ export async function runConcurrentEngine(params: {
     return;
   }
 
-  const configuredPoolSize = Number(
-    process.env.CRAWL_BROWSER_POOL_SIZE ?? params.concurrency,
+  const poolSize = resolvePoolSize(
+    params.concurrency,
+    process.env.CRAWL_BROWSER_POOL_SIZE,
   );
-  const poolSize =
-    Number.isInteger(configuredPoolSize) && configuredPoolSize > 0
-      ? Math.min(configuredPoolSize, params.concurrency)
-      : params.concurrency;
   const pool = createBrowserPoolInstance(poolSize);
-  if (!validateAsBrowserPool(pool)) throw new Error('Invalid pool');
-  if (pool.init) await pool.init();
-
-  const scheduler = new SchedulerV421(urls);
-
-  const workers = Array.from({ length: params.concurrency }, async () => {
-    while (!isShuttingDown()) {
-      for (const result of scheduler.tickWatchdog(Date.now())) {
-        upsertResult(result);
-        logProgress(scheduler, urls.length);
-      }
-
-      const lease = scheduler.getNext();
-
-      if (!lease) {
-        if (scheduler.isIdle()) return;
-        await new Promise((r) => setTimeout(r, 25));
-        continue;
-      }
-
-      const { url, leaseId } = lease;
-      let result: CrawlResult;
-
-      try {
-        result = await crawlWorker(url, pool);
-      } catch (e) {
-        result = {
-          url,
-          pdpPrice: null,
-          cartPrice: null,
-          match: false,
-          status: 'FAIL',
-          reason: 'CRAWL_FAILED',
-          trace: [
-            {
-              step: 'error',
-              status: 'ERROR',
-              message: String(e),
-              ts: Date.now(),
-            },
-          ],
-        };
-      }
-
-      const finalResult = scheduler.complete(
-        url,
-        leaseId,
-        result.status === 'OK',
-        isRetryable(result),
-      );
-
-      if (finalResult) {
-        upsertResult(result);
-        logProgress(scheduler, urls.length);
-      }
-    }
-  });
-
   try {
+    if (!validateAsBrowserPool(pool)) throw new Error('Invalid pool');
+    await pool.init();
+
+    const scheduler = new SchedulerV421(urls);
+    const workers = Array.from({ length: poolSize }, async () => {
+      while (!isShuttingDown()) {
+        for (const result of scheduler.tickWatchdog(Date.now())) {
+          upsertResult(result);
+          logProgress(scheduler, urls.length);
+        }
+
+        const lease = scheduler.getNext();
+
+        if (!lease) {
+          if (scheduler.isIdle()) return;
+          await new Promise((r) => setTimeout(r, 25));
+          continue;
+        }
+
+        const { url, leaseId } = lease;
+        let result: CrawlResult;
+
+        try {
+          result = await crawlWorker(url, pool);
+        } catch (e) {
+          result = {
+            url,
+            pdpPrice: null,
+            cartPrice: null,
+            match: false,
+            status: 'FAIL',
+            reason: 'CRAWL_FAILED',
+            trace: [
+              {
+                step: 'error',
+                status: 'ERROR',
+                message: String(e),
+                ts: Date.now(),
+              },
+            ],
+          };
+        }
+
+        const finalResult = scheduler.complete(
+          url,
+          leaseId,
+          result.status === 'OK',
+          isRetryable(result),
+        );
+
+        if (finalResult) {
+          upsertResult(result);
+          logProgress(scheduler, urls.length);
+        }
+      }
+    });
+
     await Promise.all(workers);
     await flushResults();
   } finally {
-    if (pool.close) await pool.close();
+    await pool.close();
   }
 }
 

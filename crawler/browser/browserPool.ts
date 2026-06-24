@@ -59,6 +59,7 @@ export function createBrowserPoolInstance(
   const waiters: Waiter[] = [];
   let initialized = false;
   let closed = false;
+  let suppressRelaunch = false;
 
   async function launch(slotId: number): Promise<Browser> {
     const browser = await chromium.launch({
@@ -72,7 +73,14 @@ export function createBrowserPoolInstance(
       if (slot.browser !== browser) return;
       slot.browser = null;
       slot.disconnected = true;
-      if (!slot.leased && !closed) void makeAvailable(slotId);
+      if (!slot.leased && !closed && !suppressRelaunch) {
+        void makeAvailable(slotId).catch((error) => {
+          console.error(
+            `[BrowserPool] disconnect recovery failed for slot=${slotId}:`,
+            error,
+          );
+        });
+      }
     });
     return browser;
   }
@@ -142,7 +150,27 @@ export function createBrowserPoolInstance(
     if (initialized) return;
     if (closed) throw new Error('BrowserPool is closed');
     initialized = true;
-    await Promise.all(slots.map((_, index) => launch(index)));
+    const launches = await Promise.allSettled(
+      slots.map((_, index) => launch(index)),
+    );
+    const failedLaunch = launches.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+
+    if (failedLaunch) {
+      suppressRelaunch = true;
+      await Promise.all(
+        slots.map(async (slot) => {
+          const browser = slot.browser;
+          slot.browser = null;
+          slot.disconnected = false;
+          if (browser) await browser.close().catch(() => {});
+        }),
+      );
+      suppressRelaunch = false;
+      initialized = false;
+      throw failedLaunch.reason;
+    }
   }
 
   async function acquireContext(): Promise<PoolContext> {

@@ -62,7 +62,10 @@ function renderReasonFilter() {
   select.innerHTML = `
     <option value="">All reasons</option>
     ${reasons
-      .map((reason) => `<option value="${reason}">${reason}</option>`)
+      .map(
+        (reason) =>
+          `<option value="${escapeHtml(reason)}">${escapeHtml(reason)}</option>`,
+      )
       .join('')}
   `;
 
@@ -480,7 +483,7 @@ function openTrace(row) {
 }
 
 function openTraceByUrl(url) {
-  const row = window.__ROWS_MAP[decodeURIComponent(url)];
+  const row = window.__ROWS_MAP[url];
 
   if (!row) {
     console.warn('[TRACE] not found:', url);
@@ -518,7 +521,6 @@ function renderTable(rows) {
           : '-';
 
       const rowClass = r.status === 'OK' ? 'row-ok' : 'row-fail';
-      const encodedUrl = encodeURIComponent(url);
 
       return `
       <tr class="${rowClass}">
@@ -526,9 +528,9 @@ function renderTable(rows) {
 
         <td>
           <div style="display:flex; gap:8px; align-items:center;">
-            <button onclick="window.open(decodeURIComponent('${encodedUrl}'), '_blank')">OPEN</button>
-            <button onclick="navigator.clipboard.writeText(decodeURIComponent('${encodedUrl}'))">COPY</button>
-            <button onclick="openTraceByUrl('${encodedUrl}')">TRACE</button>
+            <button data-action="open" data-url="${escapeHtml(url)}">OPEN</button>
+            <button data-action="copy" data-url="${escapeHtml(url)}">COPY</button>
+            <button data-action="trace" data-url="${escapeHtml(url)}">TRACE</button>
             ${r.screenshot ? `<a href="${escapeHtml(screenshotHref(r.screenshot))}" target="_blank">PNG</a>` : ''}
           </div>
         </td>
@@ -556,10 +558,44 @@ document
   .getElementById('reasonFilter')
   ?.addEventListener('change', applyFilters);
 
+document.getElementById('table')?.addEventListener('click', (event) => {
+  if (!(event.target instanceof Element)) return;
+  const button = event.target.closest('button[data-action][data-url]');
+  if (!button) return;
+
+  const url = button.dataset.url || '';
+  switch (button.dataset.action) {
+    case 'open': {
+      const safeUrl = safeExternalUrl(url);
+      if (safeUrl) window.open(safeUrl, '_blank', 'noopener,noreferrer');
+      break;
+    }
+    case 'copy':
+      void navigator.clipboard.writeText(url).catch((error) => {
+        console.warn('[COPY FAILED]', error);
+      });
+      break;
+    case 'trace':
+      openTraceByUrl(url);
+      break;
+  }
+});
+
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function screenshotHref(absPath) {
   const normalized = String(absPath).replace(/\\/g, '/');
   const idx = normalized.indexOf('/data/');
-  return idx >= 0 ? normalized.slice(idx) : normalized;
+  return idx >= 0 ? normalized.slice(idx) : '#';
 }
 
 function formatReason(r) {

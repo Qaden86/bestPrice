@@ -157,4 +157,22 @@ describe('browser pool waiters', () => {
       await pool.close();
     }
   });
+
+  it('closes launched browsers and allows retry after partial init failure', async () => {
+    launch
+      .mockResolvedValueOnce(fakeBrowser)
+      .mockRejectedValueOnce(new Error('launch failed'))
+      .mockResolvedValue(fakeBrowser);
+    const pool = createBrowserPoolInstance(2);
+
+    try {
+      await expect(pool.init()).rejects.toThrow('launch failed');
+      expect(fakeBrowser.close).toHaveBeenCalledOnce();
+
+      await expect(pool.init()).resolves.toBeUndefined();
+      expect(launch).toHaveBeenCalledTimes(4);
+    } finally {
+      await pool.close();
+    }
+  });
 });

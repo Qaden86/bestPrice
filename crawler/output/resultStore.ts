@@ -13,12 +13,13 @@ function drainQueue(): Promise<void> {
   if (!drainPromise) {
     drainPromise = (async () => {
       while (writeQueue.length > 0) {
-        const batch = writeQueue.splice(0, 100).join('');
+        const batchSize = Math.min(writeQueue.length, 100);
+        const batch = writeQueue.slice(0, batchSize).join('');
         await fsp.appendFile(RESULTS_PATH, batch, 'utf-8');
+        writeQueue.splice(0, batchSize);
       }
     })().finally(() => {
       drainPromise = null;
-      if (writeQueue.length > 0) void drainQueue();
     });
   }
   return drainPromise;
@@ -33,7 +34,9 @@ export function upsertResult(result: CrawlResult): void {
 
   resultBus.emit('update', result);
   writeQueue.push(JSON.stringify(result) + '\n');
-  void drainQueue();
+  void drainQueue().catch((error) => {
+    console.error('[RESULT STORE] write failed:', error);
+  });
 }
 
 export function flushResults(): Promise<void> {

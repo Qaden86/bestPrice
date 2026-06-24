@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { normalizeUrls, SchedulerV421 } from '@crawler/engine/concurrentEngine';
+import {
+  normalizeUrls,
+  resolvePoolSize,
+  SchedulerV421,
+} from '@crawler/engine/concurrentEngine';
 
 describe('SchedulerV421 lease ownership', () => {
   it('ignores a stale completion after the watchdog re-leases a URL', () => {
@@ -112,5 +116,11 @@ describe('SchedulerV421 lease ownership', () => {
         { url: 'https://example.test/product' },
       ] as unknown as { url: string }[]),
     ).toEqual(['https://example.test/product']);
+  });
+
+  it('caps active workers at the configured browser-pool size', () => {
+    expect(resolvePoolSize(5, '2')).toBe(2);
+    expect(resolvePoolSize(5, '10')).toBe(5);
+    expect(resolvePoolSize(5, 'invalid')).toBe(5);
   });
 });

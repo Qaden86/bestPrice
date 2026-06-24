@@ -7,6 +7,8 @@ import type { CrawlResult } from '../types/CrawlResult';
 
 const DEFAULT_JOB_TIMEOUT_MS = 120_000;
 
+class CrawlTimeoutError extends Error {}
+
 function jobTimeoutMs(): number {
   const parsed = Number(process.env.CRAWL_JOB_TIMEOUT_MS);
   return Number.isFinite(parsed) && parsed >= 30_000
@@ -23,7 +25,6 @@ export async function crawlWorker(
   let lease: PoolContext | null = null;
   let local = false;
   let timedOut = false;
-  let timeout: NodeJS.Timeout | undefined;
 
   try {
     if (pool) {
@@ -35,20 +36,21 @@ export async function crawlWorker(
       lease = { browser, context, _slotId: -1, leaseId: 1 };
     }
 
-    timeout = setTimeout(() => {
+    const timeoutMs = jobTimeoutMs();
+    const page = await lease.context.newPage();
+    return await runWithDeadline(crawl(page, url), timeoutMs, () => {
       timedOut = true;
       void lease?.context.close().catch(() => {});
-    }, jobTimeoutMs());
-
-    const page = await lease.context.newPage();
-    return await crawl(page, url);
+    });
   } catch (error) {
     if (isShuttingDown() || isShutdownError(error)) {
       return shutdownCrawlResult(url);
     }
 
     const message = timedOut
-      ? `Crawl exceeded ${jobTimeoutMs()}ms`
+      ? error instanceof Error
+        ? error.message
+        : `Crawl exceeded ${jobTimeoutMs()}ms`
       : error instanceof Error
         ? error.message
         : String(error);
@@ -72,8 +74,6 @@ export async function crawlWorker(
       ],
     };
   } finally {
-    if (timeout) clearTimeout(timeout);
-
     if (pool && lease) {
       await pool.releaseContext(lease).catch(() => {});
     } else if (local && lease) {
@@ -81,6 +81,24 @@ export async function crawlWorker(
       await lease.browser.close().catch(() => {});
     }
   }
+}
+
+export function runWithDeadline<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => void,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      onTimeout();
+      reject(new CrawlTimeoutError(`Crawl exceeded ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([operation, deadline]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 export default crawlWorker;

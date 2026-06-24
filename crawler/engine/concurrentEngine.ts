@@ -72,9 +72,22 @@ export function normalizeUrls(urls: (string | { url: string })[]): string[] {
         .map((item) => (typeof item === 'string' ? item : item.url))
         .filter((url): url is string => typeof url === 'string')
         .map((url) => url.trim())
-        .filter(Boolean),
+        .filter(Boolean)
+        .map(normalizeHttpUrl)
+        .filter((url): url is string => url !== null),
     ),
   ];
+}
+
+function normalizeHttpUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function resolvePoolSize(
@@ -85,6 +98,20 @@ export function resolvePoolSize(
   return Number.isInteger(parsed) && parsed > 0
     ? Math.min(parsed, concurrency)
     : concurrency;
+}
+
+export function startWatchdogSupervisor(
+  scheduler: SchedulerV421,
+  onTerminalResult: (result: CrawlResult) => void,
+  intervalMs = 1000,
+): () => void {
+  const timer = setInterval(() => {
+    for (const result of scheduler.tickWatchdog(Date.now())) {
+      onTerminalResult(result);
+    }
+  }, intervalMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
 }
 
 /* ---------------- SCHEDULER ---------------- */
@@ -338,13 +365,12 @@ export async function runConcurrentEngine(params: {
     await pool.init();
 
     const scheduler = new SchedulerV421(urls);
+    const stopWatchdog = startWatchdogSupervisor(scheduler, (result) => {
+      upsertResult(result);
+      logProgress(scheduler, urls.length);
+    });
     const workers = Array.from({ length: poolSize }, async () => {
       while (!isShuttingDown()) {
-        for (const result of scheduler.tickWatchdog(Date.now())) {
-          upsertResult(result);
-          logProgress(scheduler, urls.length);
-        }
-
         const lease = scheduler.getNext();
 
         if (!lease) {
@@ -391,8 +417,12 @@ export async function runConcurrentEngine(params: {
       }
     });
 
-    await Promise.all(workers);
-    await flushResults();
+    try {
+      await Promise.all(workers);
+      await flushResults();
+    } finally {
+      stopWatchdog();
+    }
   } finally {
     await pool.close();
   }

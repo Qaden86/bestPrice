@@ -4,6 +4,7 @@ import {
   normalizeUrls,
   resolvePoolSize,
   SchedulerV421,
+  startWatchdogSupervisor,
 } from '@crawler/engine/concurrentEngine';
 
 describe('SchedulerV421 lease ownership', () => {
@@ -107,6 +108,19 @@ describe('SchedulerV421 lease ownership', () => {
     ).toEqual(['https://example.test/product']);
   });
 
+  it('removes malformed and non-HTTP URLs', () => {
+    expect(
+      normalizeUrls([
+        'abc',
+        'not a url',
+        'ftp://example.com/file',
+        'javascript:alert(1)',
+        'https://example.test/product',
+        'http://example.test/other',
+      ]),
+    ).toEqual(['https://example.test/product', 'http://example.test/other']);
+  });
+
   it('ignores malformed object URLs at runtime', () => {
     expect(
       normalizeUrls([
@@ -122,5 +136,23 @@ describe('SchedulerV421 lease ownership', () => {
     expect(resolvePoolSize(5, '2')).toBe(2);
     expect(resolvePoolSize(5, '10')).toBe(5);
     expect(resolvePoolSize(5, 'invalid')).toBe(5);
+  });
+
+  it('ticks expired leases independently of worker progress', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-24T12:00:00.000Z'));
+
+    try {
+      const scheduler = new SchedulerV421(['https://example.test/product']);
+      expect(scheduler.getNext()).not.toBeNull();
+      const stop = startWatchdogSupervisor(scheduler, vi.fn(), 1000);
+
+      vi.advanceTimersByTime(151_000);
+
+      expect(scheduler.stats()).toMatchObject({ ready: 1, leased: 0 });
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -4,7 +4,7 @@ import type {
   BrowserPoolInstance,
   PoolContext,
 } from '@crawler/browser/browserPool';
-import { crawlWorker } from '@crawler/workers/crawlWorker';
+import { crawlWorker, runWithDeadline } from '@crawler/workers/crawlWorker';
 
 describe('crawlWorker cleanup', () => {
   it('releases its pooled context when navigation fails', async () => {
@@ -33,5 +33,26 @@ describe('crawlWorker cleanup', () => {
     expect(result.reason).toBe('NAVIGATION_FAILED');
     expect(pool.releaseContext).toHaveBeenCalledOnce();
     expect(pool.releaseContext).toHaveBeenCalledWith(slot);
+  });
+
+  it('rejects on the deadline even when the operation never settles', async () => {
+    vi.useFakeTimers();
+    const onTimeout = vi.fn();
+
+    try {
+      const pending = runWithDeadline(
+        new Promise<never>(() => {}),
+        100,
+        onTimeout,
+      );
+      const assertion = expect(pending).rejects.toThrow('Crawl exceeded 100ms');
+
+      vi.advanceTimersByTime(100);
+
+      await assertion;
+      expect(onTimeout).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

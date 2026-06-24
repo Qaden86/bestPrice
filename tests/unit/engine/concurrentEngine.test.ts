@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { SchedulerV421 } from '@crawler/engine/concurrentEngine';
+import { normalizeUrls, SchedulerV421 } from '@crawler/engine/concurrentEngine';
 
 describe('SchedulerV421 lease ownership', () => {
   it('ignores a stale completion after the watchdog re-leases a URL', () => {
@@ -80,5 +80,15 @@ describe('SchedulerV421 lease ownership', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('normalizes duplicate URL inputs before progress totals are calculated', () => {
+    expect(
+      normalizeUrls([
+        'https://example.test/product',
+        { url: 'https://example.test/product' },
+        'https://example.test/other',
+      ]),
+    ).toEqual(['https://example.test/product', 'https://example.test/other']);
   });
 });

@@ -75,6 +75,30 @@ describe('browser pool waiters', () => {
     }
   });
 
+  it('hands a freed slot to a queued waiter after context creation fails', async () => {
+    fakeBrowser.newContext
+      .mockRejectedValueOnce(new Error('context failed'))
+      .mockResolvedValueOnce({
+        close: vi.fn().mockResolvedValue(undefined),
+      });
+    const pool = createBrowserPoolInstance(1, { waitTimeoutMs: 50 });
+
+    try {
+      await pool.init();
+      const failed = pool.acquireContext();
+      const waiting = pool.acquireContext();
+
+      await expect(failed).rejects.toThrow('context failed');
+      const lease = await waiting;
+
+      expect(lease.browser).toBe(fakeBrowser);
+      expect(fakeBrowser.newContext).toHaveBeenCalledTimes(2);
+      await pool.releaseContext(lease);
+    } finally {
+      await pool.close();
+    }
+  });
+
   it('rotates a browser after the configured number of completed jobs', async () => {
     const replacementBrowser = {
       ...fakeBrowser,

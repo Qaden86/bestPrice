@@ -108,6 +108,11 @@ export function createBrowserPoolInstance(
       return { browser, context, _slotId: slotId, leaseId: slot.leaseId };
     } catch (error) {
       slot.leased = false;
+      if (!closed) {
+        queueMicrotask(() => {
+          void makeAvailable(slotId);
+        });
+      }
       throw error;
     }
   }
@@ -125,7 +130,6 @@ export function createBrowserPoolInstance(
       waiter.resolve(await createLease(slotId));
     } catch (error) {
       waiter.reject(error instanceof Error ? error : new Error(String(error)));
-      await makeAvailable(slotId);
     }
   }
 

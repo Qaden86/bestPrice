@@ -65,6 +65,14 @@ export type TaskLease = {
   leaseId: number;
 };
 
+export function normalizeUrls(urls: (string | { url: string })[]): string[] {
+  return [
+    ...new Set(
+      urls.map((item) => (typeof item === 'string' ? item : item.url)),
+    ),
+  ];
+}
+
 /* ---------------- SCHEDULER ---------------- */
 
 export class SchedulerV421 {
@@ -300,7 +308,7 @@ export async function runConcurrentEngine(params: {
   if (!Number.isInteger(params.concurrency) || params.concurrency < 1) {
     throw new Error('concurrency must be a positive integer');
   }
-  const urls = params.urls.map((u) => (typeof u === 'string' ? u : u.url));
+  const urls = normalizeUrls(params.urls);
 
   const configuredPoolSize = Number(
     process.env.CRAWL_BROWSER_POOL_SIZE ?? params.concurrency,

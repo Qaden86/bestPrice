@@ -23,25 +23,39 @@ export async function crawlWorker(
   if (isShuttingDown()) return shutdownCrawlResult(url);
 
   let lease: PoolContext | null = null;
-  let local = false;
   let timedOut = false;
 
   try {
-    if (pool) {
-      lease = await pool.acquireContext();
-    } else {
-      local = true;
-      const browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext();
-      lease = { browser, context, _slotId: -1, leaseId: 1 };
-    }
-
     const timeoutMs = jobTimeoutMs();
-    const page = await lease.context.newPage();
-    return await runWithDeadline(crawl(page, url), timeoutMs, () => {
-      timedOut = true;
-      void lease?.context.close().catch(() => {});
-    });
+    return await runWithDeadline(
+      (async () => {
+        if (pool) {
+          const acquired = await pool.acquireContext();
+          if (timedOut) {
+            await pool.releaseContext(acquired).catch(() => {});
+            throw new CrawlTimeoutError(`Crawl exceeded ${timeoutMs}ms`);
+          }
+          lease = acquired;
+        } else {
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext();
+          if (timedOut) {
+            await context.close().catch(() => {});
+            await browser.close().catch(() => {});
+            throw new CrawlTimeoutError(`Crawl exceeded ${timeoutMs}ms`);
+          }
+          lease = { browser, context, _slotId: -1, leaseId: 1 };
+        }
+
+        const page = await lease.context.newPage();
+        return await crawl(page, url);
+      })(),
+      timeoutMs,
+      () => {
+        timedOut = true;
+        void lease?.context.close().catch(() => {});
+      },
+    );
   } catch (error) {
     if (isShuttingDown() || isShutdownError(error)) {
       return shutdownCrawlResult(url);
@@ -74,11 +88,14 @@ export async function crawlWorker(
       ],
     };
   } finally {
-    if (pool && lease) {
-      await pool.releaseContext(lease).catch(() => {});
-    } else if (local && lease) {
-      await lease.context.close().catch(() => {});
-      await lease.browser.close().catch(() => {});
+    const activeLease = lease as PoolContext | null;
+    if (activeLease) {
+      if (pool) {
+        await pool.releaseContext(activeLease).catch(() => {});
+      } else {
+        await activeLease.context.close().catch(() => {});
+        await activeLease.browser.close().catch(() => {});
+      }
     }
   }
 }

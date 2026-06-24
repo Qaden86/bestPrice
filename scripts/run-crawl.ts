@@ -2,18 +2,18 @@ import fs from 'fs';
 
 import { getSitemapUrls } from '../crawler/ingestion/sitemapFetcher';
 import { isProductPage } from '../crawler/ingestion/urlFilter';
-import {
-  runConcurrentEngine,
-  installShutdownHandlers,
-} from '../crawler/engine/concurrentEngine';
-import { selectUrls } from '../crawler/engine/selectUrls';
+
+import { runConcurrentEngine } from '../crawler/engine/concurrentEngine';
 import { isShuttingDown } from '../crawler/engine/shutdown';
+
+import { selectUrls } from '../crawler/engine/selectUrls';
 
 import { getExecutionConfig } from '../config/executionConfig';
 import { getAppConfig } from '../config/appConfig';
 import { RESULTS_PATH } from '../config/path';
 import { setScreenshotsEnabled } from '../crawler/utils/screenshot';
 import { flushResults } from '../crawler/output/resultStore';
+
 import {
   archiveCurrentRunIfAny,
   ensureRunsDir,
@@ -24,6 +24,7 @@ async function main(): Promise<void> {
   console.log('[ENTRY] crawler started');
 
   ensureRunsDir();
+
   const archived = archiveCurrentRunIfAny();
   if (archived) {
     console.log('[ARCHIVE] previous run saved as', archived);
@@ -34,8 +35,6 @@ async function main(): Promise<void> {
   const startedAt = new Date().toISOString();
   const runId = startedAt.replace(/[:.]/g, '-');
 
-  installShutdownHandlers();
-
   const runtime = getExecutionConfig();
   const app = getAppConfig();
 
@@ -44,7 +43,7 @@ async function main(): Promise<void> {
   console.log('[CONFIG]', { ...runtime, baseUrl: app.baseUrl, runId });
 
   const allUrls = await getSitemapUrls(app);
-  const productUrls = allUrls.filter(isProductPage).map((item) => item.url);
+  const productUrls = allUrls.filter(isProductPage).map(i => i.url);
   const urlsToProcess = selectUrls(productUrls, runtime);
 
   console.log('[INGESTION]', {

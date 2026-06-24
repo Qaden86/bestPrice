@@ -110,7 +110,12 @@ export function createBrowserPoolInstance(
       slot.leased = false;
       if (!closed) {
         queueMicrotask(() => {
-          void makeAvailable(slotId);
+          makeAvailable(slotId).catch((makeAvailableError) => {
+            console.error(
+              `[BrowserPool] makeAvailable failed for slot=${slotId}:`,
+              makeAvailableError,
+            );
+          });
         });
       }
       throw error;

@@ -81,7 +81,7 @@ describe('browser pool waiters', () => {
       .mockResolvedValueOnce({
         close: vi.fn().mockResolvedValue(undefined),
       });
-    const pool = createBrowserPoolInstance(1, { waitTimeoutMs: 50 });
+    const pool = createBrowserPoolInstance(1, { waitTimeoutMs: 250 });
 
     try {
       await pool.init();
@@ -89,7 +89,32 @@ describe('browser pool waiters', () => {
       const waiting = pool.acquireContext();
 
       await expect(failed).rejects.toThrow('context failed');
+      await expect(waiting).resolves.toMatchObject({
+        browser: fakeBrowser,
+      });
       const lease = await waiting;
+
+      expect(lease.browser).toBe(fakeBrowser);
+      expect(fakeBrowser.newContext).toHaveBeenCalledTimes(2);
+      await pool.releaseContext(lease);
+    } finally {
+      await pool.close();
+    }
+  });
+
+  it('frees the slot after context creation fails without waiters', async () => {
+    fakeBrowser.newContext
+      .mockRejectedValueOnce(new Error('context failed'))
+      .mockResolvedValueOnce({
+        close: vi.fn().mockResolvedValue(undefined),
+      });
+    const pool = createBrowserPoolInstance(1, { waitTimeoutMs: 100 });
+
+    try {
+      await pool.init();
+
+      await expect(pool.acquireContext()).rejects.toThrow('context failed');
+      const lease = await pool.acquireContext();
 
       expect(lease.browser).toBe(fakeBrowser);
       expect(fakeBrowser.newContext).toHaveBeenCalledTimes(2);

@@ -91,4 +91,26 @@ describe('SchedulerV421 lease ownership', () => {
       ]),
     ).toEqual(['https://example.test/product', 'https://example.test/other']);
   });
+
+  it('trims URLs and removes empty inputs', () => {
+    expect(
+      normalizeUrls([
+        ' https://example.test/product ',
+        '',
+        '   ',
+        { url: 'https://example.test/product' },
+      ]),
+    ).toEqual(['https://example.test/product']);
+  });
+
+  it('ignores malformed object URLs at runtime', () => {
+    expect(
+      normalizeUrls([
+        { url: undefined },
+        { url: null },
+        { url: 42 },
+        { url: 'https://example.test/product' },
+      ] as unknown as { url: string }[]),
+    ).toEqual(['https://example.test/product']);
+  });
 });

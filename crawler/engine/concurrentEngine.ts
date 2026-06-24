@@ -68,7 +68,11 @@ export type TaskLease = {
 export function normalizeUrls(urls: (string | { url: string })[]): string[] {
   return [
     ...new Set(
-      urls.map((item) => (typeof item === 'string' ? item : item.url)),
+      urls
+        .map((item) => (typeof item === 'string' ? item : item.url))
+        .filter((url): url is string => typeof url === 'string')
+        .map((url) => url.trim())
+        .filter(Boolean),
     ),
   ];
 }
@@ -309,6 +313,10 @@ export async function runConcurrentEngine(params: {
     throw new Error('concurrency must be a positive integer');
   }
   const urls = normalizeUrls(params.urls);
+  if (urls.length === 0) {
+    await flushResults();
+    return;
+  }
 
   const configuredPoolSize = Number(
     process.env.CRAWL_BROWSER_POOL_SIZE ?? params.concurrency,

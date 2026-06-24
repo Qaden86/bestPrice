@@ -133,7 +133,9 @@ export class SchedulerV421 {
 
   /* ---------------- WATCHDOG (MANUAL TICK) ---------------- */
 
-  tickWatchdog(now: number) {
+  tickWatchdog(now: number): CrawlResult[] {
+    const terminalResults: CrawlResult[] = [];
+
     for (const [url, t] of this.tasks.entries()) {
       if (t.state !== State.LEASED || !t.leasedAt) continue;
       if (now - t.leasedAt <= LEASE_TIMEOUT_MS) continue;
@@ -147,6 +149,24 @@ export class SchedulerV421 {
         t.state = State.DEAD;
         this.leasedCount--;
         this.deadCount++;
+        terminalResults.push({
+          url,
+          pdpPrice: null,
+          cartPrice: null,
+          match: false,
+          status: 'FAIL',
+          reason: 'INTERNAL_ERROR',
+          detail: `Lease expired after ${MAX_ATTEMPTS} attempts`,
+          trace: [
+            {
+              step: 'worker',
+              status: 'ERROR',
+              message: `Lease expired after ${MAX_ATTEMPTS} attempts`,
+              bucket: 'INFRA_FAILURE',
+              ts: now,
+            },
+          ],
+        });
         continue;
       }
 
@@ -161,6 +181,8 @@ export class SchedulerV421 {
       this.bucketAdd(t.bucket, url);
       t.inBucket = t.bucket;
     }
+
+    return terminalResults;
   }
 
   /* ---------------- GET NEXT ---------------- */
@@ -295,7 +317,10 @@ export async function runConcurrentEngine(params: {
 
   const workers = Array.from({ length: params.concurrency }, async () => {
     while (!isShuttingDown()) {
-      scheduler.tickWatchdog(Date.now());
+      for (const result of scheduler.tickWatchdog(Date.now())) {
+        upsertResult(result);
+        logProgress(scheduler, urls.length);
+      }
 
       const lease = scheduler.getNext();
 
@@ -338,11 +363,7 @@ export async function runConcurrentEngine(params: {
 
       if (finalResult) {
         upsertResult(result);
-        const stats = scheduler.stats();
-        console.log(
-          `[PROGRESS] ${stats.done + stats.dead}/${urls.length} ` +
-            `(ok=${stats.done} fail=${stats.dead})`,
-        );
+        logProgress(scheduler, urls.length);
       }
     }
   });
@@ -353,6 +374,14 @@ export async function runConcurrentEngine(params: {
   } finally {
     if (pool.close) await pool.close();
   }
+}
+
+function logProgress(scheduler: SchedulerV421, total: number): void {
+  const stats = scheduler.stats();
+  console.log(
+    `[PROGRESS] ${stats.done + stats.dead}/${total} ` +
+      `(ok=${stats.done} fail=${stats.dead})`,
+  );
 }
 
 export function installShutdownHandlers(): void {

@@ -140,6 +140,7 @@ cp .env.example .env.prod
 | `SAMPLE_SIZE`                 | `100`                            | URLs to crawl in sample mode                                                          |
 | `CRAWL_CONCURRENCY`           | `3` (stage) / `5` (prod)         | Worker count                                                                          |
 | `CRAWL_BROWSER_POOL_SIZE`     | worker count                     | Reused Chromium processes, capped at worker concurrency                               |
+| `CRAWL_BROWSER_ROTATE_AFTER`  | `200`                            | Relaunch each pooled browser after this many completed jobs                           |
 | `CRAWL_JOB_TIMEOUT_MS`        | `120000`                         | Total deadline for one crawl attempt                                                  |
 | `CRAWL_LEASE_TIMEOUT_MS`      | `150000`                         | Scheduler recovery threshold; keep above the job deadline                             |
 | `CRAWL_RUN_RETENTION`         | `50`                             | Number of archived runs retained locally                                              |

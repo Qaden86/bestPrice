@@ -16,6 +16,7 @@ export type BrowserPoolInstance = {
 
 export type BrowserPoolOptions = {
   waitTimeoutMs?: number;
+  rotateAfterJobs?: number;
 };
 
 type Waiter = {
@@ -29,6 +30,7 @@ type Slot = {
   leased: boolean;
   leaseId: number;
   disconnected: boolean;
+  jobsServed: number;
 };
 
 export function createBrowserPoolInstance(
@@ -40,11 +42,19 @@ export function createBrowserPoolInstance(
   }
 
   const waitTimeoutMs = options.waitTimeoutMs ?? 30_000;
+  const configuredRotateAfter = Number(
+    options.rotateAfterJobs ?? process.env.CRAWL_BROWSER_ROTATE_AFTER ?? 200,
+  );
+  const rotateAfterJobs =
+    Number.isInteger(configuredRotateAfter) && configuredRotateAfter > 0
+      ? configuredRotateAfter
+      : 200;
   const slots: Slot[] = Array.from({ length: size }, () => ({
     browser: null,
     leased: false,
     leaseId: 0,
     disconnected: false,
+    jobsServed: 0,
   }));
   const waiters: Waiter[] = [];
   let initialized = false;
@@ -71,6 +81,16 @@ export function createBrowserPoolInstance(
     const slot = slots[slotId];
     if (slot.browser?.isConnected()) return slot.browser;
     return launch(slotId);
+  }
+
+  async function rotateBrowser(slotId: number): Promise<void> {
+    const slot = slots[slotId];
+    const previous = slot.browser;
+    slot.browser = null;
+    slot.disconnected = false;
+    slot.jobsServed = 0;
+    if (previous) await previous.close().catch(() => {});
+    if (!closed) await launch(slotId);
   }
 
   async function createLease(slotId: number): Promise<PoolContext> {
@@ -146,8 +166,21 @@ export function createBrowserPoolInstance(
     slot.leased = false;
     if (closed) return;
 
-    if (slot.disconnected || !slot.browser?.isConnected()) {
-      await ensureBrowser(ctx._slotId);
+    slot.jobsServed++;
+    if (slot.jobsServed >= rotateAfterJobs) {
+      await rotateBrowser(ctx._slotId).catch((error) => {
+        console.error(
+          `[BrowserPool] rotation failed for slot=${ctx._slotId}:`,
+          error,
+        );
+      });
+    } else if (slot.disconnected || !slot.browser?.isConnected()) {
+      await ensureBrowser(ctx._slotId).catch((error) => {
+        console.error(
+          `[BrowserPool] relaunch failed for slot=${ctx._slotId}:`,
+          error,
+        );
+      });
     }
     await makeAvailable(ctx._slotId);
   }

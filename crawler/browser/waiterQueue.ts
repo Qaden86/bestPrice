@@ -124,9 +124,7 @@ export class WaiterQueue<T = void> {
 
     if (!removed) {
       if (this.debug) {
-        console.warn(
-          '[WaiterQueue] shiftResolve: node already removed (race)',
-        );
+        console.warn('[WaiterQueue] shiftResolve: node already removed (race)');
       }
       return false;
     }
@@ -149,9 +147,7 @@ export class WaiterQueue<T = void> {
 
     if (!removed) {
       if (this.debug) {
-        console.warn(
-          '[WaiterQueue] shiftReject: node already removed (race)',
-        );
+        console.warn('[WaiterQueue] shiftReject: node already removed (race)');
       }
       return false;
     }
@@ -205,9 +201,7 @@ export class WaiterQueue<T = void> {
     node.state = 'removed';
 
     if (this.count <= 0) {
-      throw new Error(
-        '[WaiterQueue] count underflow - structural corruption',
-      );
+      throw new Error('[WaiterQueue] count underflow - structural corruption');
     }
 
     if (node.prev) {
@@ -234,9 +228,7 @@ export class WaiterQueue<T = void> {
   private finalizeNode(node: Node<T>): void {
     if (node.state === 'finalized') {
       if (this.debug) {
-        console.warn(
-          '[WaiterQueue] finalizeNode called twice on same node',
-        );
+        console.warn('[WaiterQueue] finalizeNode called twice on same node');
       }
       return;
     }

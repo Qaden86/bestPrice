@@ -52,6 +52,7 @@ enum State {
 type Task = {
   url: string;
   attempts: number;
+  leaseId: number;
   nextRunAt: number;
   leasedAt?: number;
   state: State;
@@ -59,9 +60,14 @@ type Task = {
   inBucket?: number;
 };
 
+export type TaskLease = {
+  url: string;
+  leaseId: number;
+};
+
 /* ---------------- SCHEDULER ---------------- */
 
-class SchedulerV421 {
+export class SchedulerV421 {
   private tasks = new Map<string, Task>();
   private buckets = new Map<number, Set<string>>();
 
@@ -110,6 +116,7 @@ class SchedulerV421 {
     const t: Task = {
       url,
       attempts: 0,
+      leaseId: 0,
       nextRunAt: now + delay,
       state: State.READY,
       bucket: this.bucketOf(now + delay),
@@ -157,7 +164,7 @@ class SchedulerV421 {
 
   /* ---------------- GET NEXT ---------------- */
 
-  getNext(): string | null {
+  getNext(): TaskLease | null {
     const now = this.now();
     const currentBucket = this.bucketOf(now);
     const dueBuckets = Array.from(this.buckets.keys())
@@ -180,11 +187,12 @@ class SchedulerV421 {
 
         t.state = State.LEASED;
         t.leasedAt = now;
+        t.leaseId++;
 
         this.readyCount--;
         this.leasedCount++;
 
-        return url;
+        return { url, leaseId: t.leaseId };
       }
 
       if (set.size === 0) this.buckets.delete(bucket);
@@ -218,9 +226,14 @@ class SchedulerV421 {
 
   /* ---------------- COMPLETE ---------------- */
 
-  complete(url: string, ok: boolean, retryable: boolean): boolean {
+  complete(
+    url: string,
+    leaseId: number,
+    ok: boolean,
+    retryable: boolean,
+  ): boolean {
     const t = this.tasks.get(url);
-    if (!t || t.state !== State.LEASED) return true;
+    if (!t || t.state !== State.LEASED || t.leaseId !== leaseId) return false;
 
     this.leasedCount--;
     t.attempts++;
@@ -273,14 +286,15 @@ export async function runConcurrentEngine(params: {
     while (!isShuttingDown()) {
       scheduler.tickWatchdog(Date.now());
 
-      const url = scheduler.getNext();
+      const lease = scheduler.getNext();
 
-      if (!url) {
+      if (!lease) {
         if (scheduler.isIdle()) return;
         await new Promise((r) => setTimeout(r, 25));
         continue;
       }
 
+      const { url, leaseId } = lease;
       let result: CrawlResult;
 
       try {
@@ -306,6 +320,7 @@ export async function runConcurrentEngine(params: {
 
       const finalResult = scheduler.complete(
         url,
+        leaseId,
         result.status === 'OK',
         isRetryable(result),
       );

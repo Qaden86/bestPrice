@@ -514,7 +514,145 @@ The engine retries transient failures up to 3 times — if it still fails, the s
 
 ### `cartFailureRate` looks wrong
 
-It counts both `ADD_TO_CART_FAILED` rows and rows missing a `cartPrice`. If you want only the explicit fails, filter by reason `ADD_TO_CART_FAILED` in the table.
+It counts both `ADD_TO_CART_FAIL# BestPrice UA — Crawler & E2E Automation
+
+End-to-end pipeline for [bestprice.com.ua](https://bestprice.com.ua):
+
+- **Crawler** — concurrent product-page crawler that extracts PDP/cart prices, validates parity, and streams results to a dashboard.
+- **UI tests & integration tests** — Playwright + Page Object Model for the storefront.
+- **Unit tests** — Vitest for parsing, validation, retry, and extractors.
+
+# Architecture
+
+sitemap  
+↓ URL filter  
+↓ concurrent workers  
+↓ BrowserPool (reused Browser instances)  
+↓ fresh BrowserContext per URL  
+↓ crawl + validate  
+↓ result store (NDJSON + SSE)  
+↓ dashboard
+
+Note: the key architectural decision is Browser reuse. Playwright Browser instances are reused across jobs; isolation is provided by creating a fresh BrowserContext per URL.
+
+### BrowserPool issues
+
+- Browser rotation is best-effort. If a browser relaunch fails, the slot enters a recovery state and retries relaunch with exponential backoff. The slot is not removed from the pool.
+- During recovery the slot is temporarily unavailable to workers until a healthy Browser instance is successfully relaunched.
+- Prefer `BrowserPool.acquireContext()` in workers. It provides:
+  - a fresh `BrowserContext`
+  - the underlying `Browser` instance
+  - an idempotent `release()` helper that closes the context and returns the Browser to the pool
+- To confirm per-job isolation, run a small sample crawl and verify that cookies, localStorage, and session state do not persist between URLs.
+
+### Browser launch retries
+
+- `BrowserPool` performs automatic retries when launching Chromium:
+  - Initial pool creation uses `retryLaunch()`
+  - Browser rotation uses `retryLaunch()`
+  - Each `retryLaunch()` attempts up to 3 launches with a 1s delay between attempts
+- This reduces failures caused by temporary Chromium startup issues.
+
+### BrowserPool & rotation notes
+
+- Defaults:
+  - `CRAWL_BROWSER_POOL_SIZE=2`
+  - `CRAWL_BROWSER_ROTATE_AFTER=200`
+- `BrowserPool` reuses Playwright Browser instances only. A fresh BrowserContext is created per URL.
+- Use `BrowserPool.acquireContext()` in workers (recommended). It returns:
+  - a fresh `BrowserContext`
+  - the underlying `Browser` instance
+  - an idempotent `release()` helper that should be called from a `finally` block
+- Rotation is atomic per slot.
+- If browser relaunch fails, the slot enters recovery mode and retries relaunch using exponential backoff. Closed browser instances are never handed to consumers.
+- Recovery timers are cleared automatically during pool shutdown.
+- When the pool shuts down, pending waiters are rejected with an Error whose message is `"BrowserPool shutdown"`.
+- If the pool is overloaded with too many pending acquisitions, `acquireContext()` rejects with `"BrowserPool too many waiters"`. This prevents unbounded memory growth (see `maxWaiters` in `crawler/browser/browserPool.ts`).
+
+<!-- Optional: add generation indexing note right here -->
+
+- Generation indexing: `BrowserPool` waiters are tracked with a best-effort generation index inside `WaiterQueue`. The index may drift if generation extractor functions throw; the queue remains correct but index-based helpers (e.g. `hasGen`, `countGen`) are approximations only.
+
+### BrowserPool recovery behavior
+
+Recovery backoff schedule (matches implementation):
+
+- attempt 1 → 1s
+- attempt 2 → 2s
+- attempt 3 → 4s
+- attempt 4 → 8s
+- … doubled each attempt, capped at 30s
+
+Formula:
+backoff = min(30000, 1000 \* 2^(attempt - 1))
+
+If a relaunch fails:
+old browser → close → recovery mode → exponential backoff → retry relaunch
+
+During recovery:
+
+- the slot remains part of the pool
+- the slot is unavailable to workers
+- closed browser instances are never handed out
+- recovery retries continue until a new Browser instance launches successfully or the pool is shut down
+
+### BrowserContext lifecycle
+
+Every crawl job receives a fresh BrowserContext. Example usage:
+
+    const { context, release } = await pool.acquireContext();
+    try {
+      // perform per-URL work using `context`
+    } finally {
+      await release(); // idempotent: safe to call multiple times
+    }
+
+The returned `release()` function:
+
+- is idempotent (safe to call repeatedly)
+- always attempts to close the BrowserContext
+- always attempts to return the Browser to the pool
+
+This guarantees isolation between URLs and prevents leaked contexts.
+
+### BrowserPool shutdown
+
+When the pool shuts down:
+
+- new acquisitions are rejected
+- pending waiters are rejected with `"browser pool closed"`
+- scheduled recovery timers are cancelled
+- all Browser instances are closed
+  This prevents dangling waiters and background recovery tasks during process termination.
+
+## Configuration
+
+| Variable                     | Default | Description                                                                                                                            |
+| ---------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `CRAWL_BROWSER_POOL_SIZE`    | `2`     | Number of Browser instances kept alive                                                                                                 |
+| `CRAWL_BROWSER_ROTATE_AFTER` | `200`   | Rotate Browser after N completed jobs. Failed rotations automatically enter recovery mode and retry relaunch with exponential backoff. |
+
+### Initialization failures
+
+If all browser launches fail during startup you may see:
+
+    Error: browser pool has no slots (initialization may have failed)
+
+Verify:
+
+- Playwright browsers are installed (`npx playwright install --with-deps`)
+- Chromium can start on the target machine (container permissions, sandbox flags)
+- Sufficient resources (CPU/memory) for headless Chromium startup
+
+Quick verification:
+
+- Start with a small pool and early rotate to observe behavior:
+  - `CRAWL_BROWSER_POOL_SIZE=2 CRAWL_BROWSER_ROTATE_AFTER=10 npm run crawl:stage:sample`
+- Watch logs for: `handed slot`, `rotate START`, `rotate DONE`, `failed to relaunch browser`, `recovery rotate`, `closed slot`.
+
+## Table of Contents
+
+ED`rows and rows missing a`cartPrice`. If you want only the explicit fails, filter by reason `ADD_TO_CART_FAILED` in the table.
 
 ### Ctrl-C left a half-written `results.ndjson`
 

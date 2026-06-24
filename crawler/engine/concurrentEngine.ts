@@ -1,9 +1,21 @@
 /**
  * This scheduler is optimized for single-node crawling (~10k URLs).
  * It is NOT designed for distributed frontier coordination.
+ *
+ * Fault Tolerance Model:
+ * - Tasks are leased to workers. If a worker crashes silently (process kill, OOM, unhandled rejection),
+ *   the task might get stuck in LEASED state forever.
+ * - To mitigate this, we use a "lease timeout watchdog" (reviveStuckLeases).
+ *
+ * Design rule:
+ * - NO background timers inside scheduler.
+ * - All state transitions are driven by engine loop.
  */
 
-import { createBrowserPoolInstance, validateAsBrowserPool } from '../browser/browserPool';
+import {
+  createBrowserPoolInstance,
+  validateAsBrowserPool,
+} from '../browser/browserPool';
 import crawlWorker from '../workers/crawlWorker';
 import { upsertResult, flushResults } from '../output/resultStore';
 import type { CrawlResult } from '../types/CrawlResult';
@@ -11,7 +23,7 @@ import type { CrawlResult } from '../types/CrawlResult';
 /* ---------------- CONFIG ---------------- */
 
 const BUCKET_MS = 1000;
-const LEASE_MS = 120_000;
+const LEASE_TIMEOUT_MS = 60_000;
 const MAX_ATTEMPTS = 3;
 
 /* ---------------- TYPES ---------------- */
@@ -27,29 +39,25 @@ type Task = {
   url: string;
   attempts: number;
   nextRunAt: number;
-  leaseUntil: number;
+  leasedAt?: number;
   state: State;
   bucket: number;
+  inBucket?: number;
 };
 
 /* ---------------- SCHEDULER ---------------- */
 
 class SchedulerV421 {
   private tasks = new Map<string, Task>();
-
-  // time buckets
   private buckets = new Map<number, Set<string>>();
 
-  // deterministic counters (single source of truth)
   private readyCount = 0;
   private leasedCount = 0;
   private doneCount = 0;
   private deadCount = 0;
 
   constructor(urls: string[]) {
-    for (const url of urls) {
-      this.add(url);
-    }
+    for (const url of urls) this.add(url);
   }
 
   /* ---------------- TIME ---------------- */
@@ -76,12 +84,8 @@ class SchedulerV421 {
   private bucketRemove(bucket: number, url: string) {
     const set = this.buckets.get(bucket);
     if (!set) return;
-
     set.delete(url);
-
-    if (set.size === 0) {
-      this.buckets.delete(bucket);
-    }
+    if (set.size === 0) this.buckets.delete(bucket);
   }
 
   /* ---------------- TASK CREATE ---------------- */
@@ -93,46 +97,47 @@ class SchedulerV421 {
       url,
       attempts: 0,
       nextRunAt: now + delay,
-      leaseUntil: 0,
       state: State.READY,
-      bucket: 0,
+      bucket: this.bucketOf(now + delay),
     };
 
-    const bucket = this.bucketOf(t.nextRunAt);
-    t.bucket = bucket;
+    t.inBucket = t.bucket;
 
     this.tasks.set(url, t);
-    this.bucketAdd(bucket, url);
+    this.bucketAdd(t.bucket, url);
 
     this.readyCount++;
   }
 
-  /* ---------------- LEASE REVIVAL (SAFE, NO OVERCOUNT) ---------------- */
+  /* ---------------- WATCHDOG (MANUAL TICK) ---------------- */
 
-  private revive(now: number) {
-    const currentBucket = this.bucketOf(now);
+  tickWatchdog(now: number) {
+    for (const [url, t] of this.tasks.entries()) {
+      if (t.state !== State.LEASED || !t.leasedAt) continue;
+      if (now - t.leasedAt <= LEASE_TIMEOUT_MS) continue;
 
-    // check neighboring buckets to avoid boundary misses
-    for (let b = currentBucket - 1; b <= currentBucket + 1; b++) {
-      const set = this.buckets.get(b);
-      if (!set) continue;
+      this.bucketRemove(t.inBucket!, url);
+      t.inBucket = undefined;
 
-      for (const url of set) {
-        const t = this.tasks.get(url);
-        if (!t) continue;
+      t.attempts++;
 
-        if (
-          t.state === State.LEASED &&
-          t.leaseUntil > 0 &&
-          t.leaseUntil <= now
-        ) {
-          t.state = State.READY;
-          t.nextRunAt = now;
-
-          this.leasedCount--;
-          this.readyCount++;
-        }
+      if (t.attempts >= MAX_ATTEMPTS) {
+        t.state = State.DEAD;
+        this.leasedCount--;
+        this.deadCount++;
+        continue;
       }
+
+      const delay = 1000 * Math.pow(2, t.attempts);
+      t.nextRunAt = now + delay;
+      t.bucket = this.bucketOf(t.nextRunAt);
+      t.state = State.READY;
+
+      this.leasedCount--;
+      this.readyCount++;
+
+      this.bucketAdd(t.bucket, url);
+      t.inBucket = t.bucket;
     }
   }
 
@@ -141,26 +146,21 @@ class SchedulerV421 {
   getNext(): string | null {
     const now = this.now();
 
-    this.revive(now);
-
     const bucket = this.bucketOf(now);
     const set = this.buckets.get(bucket);
-
     if (!set) return null;
 
     for (const url of set) {
       const t = this.tasks.get(url);
       if (!t) continue;
-
-      // race safety
       if (t.state !== State.READY) continue;
       if (t.nextRunAt > now) continue;
 
-      // remove from bucket ONLY if still valid
       set.delete(url);
+      t.inBucket = undefined;
 
       t.state = State.LEASED;
-      t.leaseUntil = now + LEASE_MS;
+      t.leasedAt = now;
 
       this.readyCount--;
       this.leasedCount++;
@@ -178,59 +178,51 @@ class SchedulerV421 {
     if (!t) return false;
 
     if (t.attempts >= MAX_ATTEMPTS) {
-      if (t.state !== State.DEAD) {
-        t.state = State.DEAD;
-        this.deadCount++;
-      }
+      t.state = State.DEAD;
+      this.deadCount++;
       return false;
     }
 
-    // remove old bucket safely
-    this.bucketRemove(t.bucket, url);
+    if (t.inBucket !== undefined) {
+      this.bucketRemove(t.inBucket, url);
+    }
 
     t.attempts++;
 
-    const delay = 1000 * Math.pow(2, t.attempts);
     const now = this.now();
+    const delay = 1000 * Math.pow(2, t.attempts);
 
     t.nextRunAt = now + delay;
     t.bucket = this.bucketOf(t.nextRunAt);
     t.state = State.READY;
 
     this.bucketAdd(t.bucket, url);
+    t.inBucket = t.bucket;
 
     this.readyCount++;
 
     return true;
   }
 
-  /* ---------------- COMPLETE (SINGLE SOURCE OF TRUTH) ---------------- */
+  /* ---------------- COMPLETE ---------------- */
 
   complete(url: string, ok: boolean) {
     const t = this.tasks.get(url);
-    if (!t) return;
-
-    if (t.state !== State.LEASED) return;
+    if (!t || t.state !== State.LEASED) return;
 
     this.leasedCount--;
 
     if (ok) {
       t.state = State.DONE;
       this.doneCount++;
-      return;
+    } else {
+      this.scheduleRetry(url);
     }
-
-    // scheduler owns retry transitions
-    this.scheduleRetry(url);
   }
-
-  /* ---------------- IDLE ---------------- */
 
   isIdle(): boolean {
     return this.readyCount === 0 && this.leasedCount === 0;
   }
-
-  /* ---------------- STATS (safe snapshot) ---------------- */
 
   stats() {
     return {
@@ -248,7 +240,7 @@ export async function runConcurrentEngine(params: {
   urls: (string | { url: string })[];
   concurrency: number;
 }) {
-  const urls = params.urls.map(u => (typeof u === 'string' ? u : u.url));
+  const urls = params.urls.map((u) => (typeof u === 'string' ? u : u.url));
 
   const pool = await createBrowserPoolInstance(params.concurrency);
   if (!validateAsBrowserPool(pool)) throw new Error('Invalid pool');
@@ -258,11 +250,13 @@ export async function runConcurrentEngine(params: {
 
   const workers = Array.from({ length: params.concurrency }, async () => {
     while (true) {
+      scheduler.tickWatchdog(Date.now());
+
       const url = scheduler.getNext();
 
       if (!url) {
         if (scheduler.isIdle()) return;
-        await new Promise(r => setTimeout(r, 25));
+        await new Promise((r) => setTimeout(r, 25));
         continue;
       }
 
@@ -289,11 +283,9 @@ export async function runConcurrentEngine(params: {
         };
       }
 
-      const ok = result.status === 'OK';
+      scheduler.complete(url, result.status === 'OK');
 
-      scheduler.complete(url, ok);
-
-      if (ok) {
+      if (result.status === 'OK') {
         upsertResult(result);
       }
     }

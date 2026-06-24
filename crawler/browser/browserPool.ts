@@ -714,3 +714,49 @@ export function validateAsBrowserPool(obj: any): obj is BrowserPoolInstance {
     typeof obj.close === 'function'
   );
 }
+
+export class BrowserPool implements BrowserPoolInstance {
+  private readonly pool: BrowserPoolInstance;
+  private readonly legacyLeases = new Map<Browser, PoolContext[]>();
+
+  constructor(size = 2) {
+    this.pool = createBrowserPoolInstance(size);
+  }
+
+  init(): Promise<void> {
+    return this.pool.init();
+  }
+
+  acquireContext(): Promise<PoolContext> {
+    return this.pool.acquireContext();
+  }
+
+  releaseContext(ctx: PoolContext): Promise<void> {
+    return this.pool.releaseContext(ctx);
+  }
+
+  async acquire(): Promise<Browser> {
+    const ctx = await this.pool.acquireContext();
+    const leases = this.legacyLeases.get(ctx.browser) ?? [];
+    leases.push(ctx);
+    this.legacyLeases.set(ctx.browser, leases);
+    return ctx.browser;
+  }
+
+  release(browser: Browser): void {
+    const leases = this.legacyLeases.get(browser);
+    const ctx = leases?.shift();
+
+    if (!ctx) return;
+    if (leases && leases.length === 0) {
+      this.legacyLeases.delete(browser);
+    }
+
+    void this.pool.releaseContext(ctx);
+  }
+
+  close(): Promise<void> {
+    this.legacyLeases.clear();
+    return this.pool.close();
+  }
+}

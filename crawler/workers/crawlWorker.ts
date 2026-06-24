@@ -1,50 +1,73 @@
-import { BrowserContext } from 'playwright';
+import { chromium } from 'playwright';
 
-import { BrowserPool } from '../browser/browserPool';
+import type { BrowserPoolInstance, PoolContext } from '../browser/browserPool';
 import { crawl, shutdownCrawlResult } from '../crawl';
-import { CrawlResult } from '../types/CrawlResult';
 import { isShuttingDown, isShutdownError } from '../engine/shutdown';
+import type { CrawlResult } from '../types/CrawlResult';
 
-function normalizeUrl(input: string | { url: string }): string {
-  if (typeof input === 'string') return input;
-  if (input?.url) return input.url;
-  return 'unknown';
+const DEFAULT_JOB_TIMEOUT_MS = 120_000;
+
+class CrawlTimeoutError extends Error {}
+
+function jobTimeoutMs(): number {
+  const parsed = Number(process.env.CRAWL_JOB_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed >= 30_000
+    ? Math.floor(parsed)
+    : DEFAULT_JOB_TIMEOUT_MS;
 }
 
 export async function crawlWorker(
-  inputUrl: string | { url: string },
-  pool: BrowserPool,
+  url: string,
+  pool?: BrowserPoolInstance,
 ): Promise<CrawlResult> {
-  const url = normalizeUrl(inputUrl);
+  if (isShuttingDown()) return shutdownCrawlResult(url);
 
-  if (isShuttingDown()) {
-    return shutdownCrawlResult(url);
-  }
-
-  const browser = await pool.acquire();
-  let context: BrowserContext | null = null;
+  let lease: PoolContext | null = null;
+  let timedOut = false;
 
   try {
-    if (isShuttingDown()) {
+    const timeoutMs = jobTimeoutMs();
+    return await runWithDeadline(
+      (async () => {
+        if (pool) {
+          const acquired = await pool.acquireContext();
+          if (timedOut) {
+            await pool.releaseContext(acquired).catch(() => {});
+            throw new CrawlTimeoutError(`Crawl exceeded ${timeoutMs}ms`);
+          }
+          lease = acquired;
+        } else {
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext();
+          if (timedOut) {
+            await context.close().catch(() => {});
+            await browser.close().catch(() => {});
+            throw new CrawlTimeoutError(`Crawl exceeded ${timeoutMs}ms`);
+          }
+          lease = { browser, context, _slotId: -1, leaseId: 1 };
+        }
+
+        const page = await lease.context.newPage();
+        return await crawl(page, url);
+      })(),
+      timeoutMs,
+      () => {
+        timedOut = true;
+        void lease?.context.close().catch(() => {});
+      },
+    );
+  } catch (error) {
+    if (isShuttingDown() || isShutdownError(error)) {
       return shutdownCrawlResult(url);
     }
 
-    context = await browser.newContext({
-      locale: 'uk-UA',
-      viewport: { width: 1280, height: 900 },
-      userAgent:
-        'Mozilla/5.0 (compatible; BestPriceCrawler/1.0; +https://bestprice.com.ua)',
-    });
-
-    const page = await context.newPage();
-    return await crawl(page, url);
-  } catch (e: unknown) {
-    if (isShutdownError(e) || isShuttingDown()) {
-      return shutdownCrawlResult(url);
-    }
-
-    const message = e instanceof Error ? e.message : String(e);
-    console.error('[WORKER ERROR]', url, message);
+    const message = timedOut
+      ? error instanceof Error
+        ? error.message
+        : `Crawl exceeded ${jobTimeoutMs()}ms`
+      : error instanceof Error
+        ? error.message
+        : String(error);
 
     return {
       url,
@@ -52,20 +75,47 @@ export async function crawlWorker(
       cartPrice: null,
       match: false,
       status: 'FAIL',
-      reason: 'CRAWL_FAILED',
+      reason: timedOut ? 'INTERNAL_ERROR' : 'CRAWL_FAILED',
+      detail: message,
       trace: [
         {
           step: 'worker',
           status: 'ERROR',
           message,
+          bucket: 'INFRA_FAILURE',
           ts: Date.now(),
         },
       ],
     };
   } finally {
-    if (context) {
-      await context.close().catch(() => {});
+    const activeLease = lease as PoolContext | null;
+    if (activeLease) {
+      if (pool) {
+        await pool.releaseContext(activeLease).catch(() => {});
+      } else {
+        await activeLease.context.close().catch(() => {});
+        await activeLease.browser.close().catch(() => {});
+      }
     }
-    pool.release(browser);
   }
 }
+
+export function runWithDeadline<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => void,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      onTimeout();
+      reject(new CrawlTimeoutError(`Crawl exceeded ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([operation, deadline]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+export default crawlWorker;

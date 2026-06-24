@@ -14,6 +14,15 @@ let CURRENT_PAGE = 1;
 let PAGE_SIZE = 25;
 let FILTERED_ROWS = [];
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 /**
  * Normalize URL into strict string.
  * Prevents "object URL" bugs from backend.
@@ -53,7 +62,10 @@ function renderReasonFilter() {
   select.innerHTML = `
     <option value="">All reasons</option>
     ${reasons
-      .map((reason) => `<option value="${reason}">${reason}</option>`)
+      .map(
+        (reason) =>
+          `<option value="${escapeHtml(reason)}">${escapeHtml(reason)}</option>`,
+      )
       .join('')}
   `;
 
@@ -77,14 +89,14 @@ async function loadRunsList() {
       '<option value="current">Current run</option>' +
       ARCHIVED_RUNS.map(
         (r) =>
-          `<option value="${r.runId}">${r.finishedAt.slice(0, 19)} — OK ${r.ok}/${r.total}</option>`,
+          `<option value="${escapeHtml(r.runId)}">${escapeHtml(r.finishedAt.slice(0, 19))} — OK ${r.ok}/${r.total}</option>`,
       ).join('');
 
     compareSelect.innerHTML =
       '<option value="">Compare with…</option>' +
       ARCHIVED_RUNS.map(
         (r) =>
-          `<option value="${r.runId}">${r.finishedAt.slice(0, 19)}</option>`,
+          `<option value="${escapeHtml(r.runId)}">${escapeHtml(r.finishedAt.slice(0, 19))}</option>`,
       ).join('');
   } catch (e) {
     console.warn('[RUNS LIST]', e);
@@ -113,7 +125,7 @@ async function loadCompareBanner() {
 
   banner.style.display = 'block';
   banner.innerHTML = `
-    <strong>Compare</strong> ${compareId} → ${baseline} |
+    <strong>Compare</strong> ${escapeHtml(compareId)} → ${escapeHtml(baseline)} |
     improved ${data.diff.improved}, regressed ${data.diff.regressed} |
     success rate Δ ${stab >= 0 ? '+' : ''}${stab.toFixed(1)}% |
     SELECTOR_NOT_FOUND Δ ${sel?.delta ?? 0} |
@@ -265,7 +277,7 @@ function renderInsightsFromRows() {
     ? topSteps
         .map(
           (s) =>
-            `<li><span class="insight-key">${s.step}</span><span class="insight-val">${s.count}</span></li>`,
+            `<li><span class="insight-key">${escapeHtml(s.step)}</span><span class="insight-val">${s.count}</span></li>`,
         )
         .join('')
     : '<li class="insight-empty">No failing steps</li>';
@@ -274,7 +286,7 @@ function renderInsightsFromRows() {
     ? buckets
         .map(
           (b) =>
-            `<li><span class="insight-key">${b.bucket}</span><span class="insight-val">${b.count}</span></li>`,
+            `<li><span class="insight-key">${escapeHtml(b.bucket)}</span><span class="insight-val">${b.count}</span></li>`,
         )
         .join('')
     : '<li class="insight-empty">No buckets</li>';
@@ -432,11 +444,11 @@ function openTrace(row) {
     .map(
       (t) => `
     <div class="trace-item">
-      <div><b>${t.step}</b></div>
-      <div>${t.status}</div>
-      <div>${t.ts || '-'}</div>
-      ${t.message ? `<div>${JSON.stringify(t.message)}</div>` : ''}
-      ${t.data ? `<pre>${JSON.stringify(t.data, null, 2)}</pre>` : ''}
+      <div><b>${escapeHtml(t.step)}</b></div>
+      <div>${escapeHtml(t.status)}</div>
+      <div>${escapeHtml(t.ts || '-')}</div>
+      ${t.message ? `<div>${escapeHtml(JSON.stringify(t.message))}</div>` : ''}
+      ${t.data ? `<pre>${escapeHtml(JSON.stringify(t.data, null, 2))}</pre>` : ''}
     </div>
   `,
     )
@@ -451,14 +463,14 @@ function openTrace(row) {
         <button onclick="closeTrace()">Close</button>
       </div>
 
-      <div class="modal-url">${url}</div>
+      <div class="modal-url">${escapeHtml(url)}</div>
 
       <div>
-        <b>Status:</b> ${row.status}<br/>
-        <b>Reason:</b> ${row.reason}<br/>
-        <b>PDP:</b> ${pdp}<br/>
-        <b>Cart:</b> ${cart}<br/>
-        <b>Diff:</b> ${diff}
+        <b>Status:</b> ${escapeHtml(row.status)}<br/>
+        <b>Reason:</b> ${escapeHtml(row.reason)}<br/>
+        <b>PDP:</b> ${escapeHtml(pdp)}<br/>
+        <b>Cart:</b> ${escapeHtml(cart)}<br/>
+        <b>Diff:</b> ${escapeHtml(diff)}
       </div>
 
       <hr/>
@@ -512,21 +524,21 @@ function renderTable(rows) {
 
       return `
       <tr class="${rowClass}">
-        <td>${r.status}</td>
+        <td>${escapeHtml(r.status)}</td>
 
         <td>
           <div style="display:flex; gap:8px; align-items:center;">
-            <button onclick="window.open('${url}', '_blank')">OPEN</button>
-            <button onclick="navigator.clipboard.writeText('${url}')">COPY</button>
-            <button onclick="openTraceByUrl('${url}')">TRACE</button>
-            ${r.screenshot ? `<a href="${screenshotHref(r.screenshot)}" target="_blank">PNG</a>` : ''}
+            <button data-action="open" data-url="${escapeHtml(url)}">OPEN</button>
+            <button data-action="copy" data-url="${escapeHtml(url)}">COPY</button>
+            <button data-action="trace" data-url="${escapeHtml(url)}">TRACE</button>
+            ${r.screenshot ? `<a href="${escapeHtml(screenshotHref(r.screenshot))}" target="_blank">PNG</a>` : ''}
           </div>
         </td>
 
-        <td>${pdp}</td>
-        <td>${cart}</td>
-        <td>${diff}</td>
-        <td>${formatReason(r)}</td>
+        <td>${escapeHtml(pdp)}</td>
+        <td>${escapeHtml(cart)}</td>
+        <td>${escapeHtml(diff)}</td>
+        <td>${escapeHtml(formatReason(r))}</td>
       </tr>
     `;
     })
@@ -546,10 +558,44 @@ document
   .getElementById('reasonFilter')
   ?.addEventListener('change', applyFilters);
 
+document.getElementById('table')?.addEventListener('click', (event) => {
+  if (!(event.target instanceof Element)) return;
+  const button = event.target.closest('button[data-action][data-url]');
+  if (!button) return;
+
+  const url = button.dataset.url || '';
+  switch (button.dataset.action) {
+    case 'open': {
+      const safeUrl = safeExternalUrl(url);
+      if (safeUrl) window.open(safeUrl, '_blank', 'noopener,noreferrer');
+      break;
+    }
+    case 'copy':
+      void navigator.clipboard.writeText(url).catch((error) => {
+        console.warn('[COPY FAILED]', error);
+      });
+      break;
+    case 'trace':
+      openTraceByUrl(url);
+      break;
+  }
+});
+
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function screenshotHref(absPath) {
   const normalized = String(absPath).replace(/\\/g, '/');
   const idx = normalized.indexOf('/data/');
-  return idx >= 0 ? normalized.slice(idx) : normalized;
+  return idx >= 0 ? normalized.slice(idx) : '#';
 }
 
 function formatReason(r) {

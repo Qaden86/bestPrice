@@ -1,9 +1,30 @@
-import { BrowserPool } from '../browser/browserPool';
-import { crawlWorker } from '../workers/crawlWorker';
+/**
+ * This scheduler is optimized for single-node crawling (~10k URLs).
+ * It is NOT designed for distributed frontier coordination.
+ *
+ * Fault Tolerance Model:
+ * - Tasks are leased to workers. If a worker crashes silently (process kill, OOM, unhandled rejection),
+ *   the task might get stuck in LEASED state forever.
+ * - To mitigate this, we use a "lease timeout watchdog" (reviveStuckLeases).
+ *
+ * Design rule:
+ * - NO background timers inside scheduler.
+ * - All state transitions are driven by engine loop.
+ */
+
+import {
+  createBrowserPoolInstance,
+  validateAsBrowserPool,
+} from '../browser/browserPool';
+import crawlWorker from '../workers/crawlWorker';
 import { upsertResult, flushResults } from '../output/resultStore';
 import { isShuttingDown, requestShutdown } from './shutdown';
-import { CrawlReason, CrawlResult } from '../types/CrawlResult';
+import type { CrawlReason, CrawlResult } from '../types/CrawlResult';
 
+/* ---------------- CONFIG ---------------- */
+
+const BUCKET_MS = 1000;
+const LEASE_TIMEOUT_MS = Number(process.env.CRAWL_LEASE_TIMEOUT_MS ?? 150_000);
 const MAX_ATTEMPTS = 3;
 
 const RETRYABLE_REASONS: ReadonlySet<CrawlReason> = new Set<CrawlReason>([
@@ -19,74 +40,406 @@ function isRetryable(result: CrawlResult): boolean {
   return RETRYABLE_REASONS.has(result.reason);
 }
 
-export async function runConcurrentEngine(params: {
-  urls: (string | { url: string })[];
-  concurrency: number;
-}): Promise<void> {
-  const urls = params.urls.map((u) => (typeof u === 'string' ? u : u.url));
+/* ---------------- TYPES ---------------- */
 
-  const pool = new BrowserPool(params.concurrency);
-  await pool.init();
+enum State {
+  READY = 'READY',
+  LEASED = 'LEASED',
+  DONE = 'DONE',
+  DEAD = 'DEAD',
+}
 
-  let cursor = 0;
-  let completed = 0;
+type Task = {
+  url: string;
+  attempts: number;
+  leaseId: number;
+  nextRunAt: number;
+  leasedAt?: number;
+  state: State;
+  bucket: number;
+  inBucket?: number;
+};
 
-  const retryQueue: string[] = [];
-  const attempts = new Map<string, number>();
+export type TaskLease = {
+  url: string;
+  leaseId: number;
+};
 
-  const getNext = (): string | null => {
-    if (isShuttingDown()) return null;
-    if (retryQueue.length) return retryQueue.shift()!;
-    if (cursor >= urls.length) return null;
-    return urls[cursor++];
-  };
+export function normalizeUrls(urls: (string | { url: string })[]): string[] {
+  return [
+    ...new Set(
+      urls
+        .map((item) => (typeof item === 'string' ? item : item.url))
+        .filter((url): url is string => typeof url === 'string')
+        .map((url) => url.trim())
+        .filter(Boolean)
+        .map(normalizeHttpUrl)
+        .filter((url): url is string => url !== null),
+    ),
+  ];
+}
 
-  const worker = async () => {
-    while (!isShuttingDown()) {
-      const url = getNext();
-      if (!url) return;
+function normalizeHttpUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
 
-      const attempt = (attempts.get(url) ?? 0) + 1;
-      attempts.set(url, attempt);
+export function resolvePoolSize(
+  concurrency: number,
+  configured?: string,
+): number {
+  const parsed = Number(configured);
+  return Number.isInteger(parsed) && parsed > 0
+    ? Math.min(parsed, concurrency)
+    : concurrency;
+}
 
-      const result = await crawlWorker(url, pool);
+export function startWatchdogSupervisor(
+  scheduler: SchedulerV421,
+  onTerminalResult: (result: CrawlResult) => void,
+  intervalMs = 1000,
+): () => void {
+  const timer = setInterval(() => {
+    for (const result of scheduler.tickWatchdog(Date.now())) {
+      onTerminalResult(result);
+    }
+  }, intervalMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
 
-      const canRetry =
-        !isShuttingDown() && attempt < MAX_ATTEMPTS && isRetryable(result);
+/* ---------------- SCHEDULER ---------------- */
 
-      if (canRetry) {
-        console.log(
-          `[RETRY] ${url} (${attempt}/${MAX_ATTEMPTS}) reason=${result.reason}`,
-        );
-        retryQueue.push(url);
+export class SchedulerV421 {
+  private tasks = new Map<string, Task>();
+  private buckets = new Map<number, Set<string>>();
+
+  private readyCount = 0;
+  private leasedCount = 0;
+  private doneCount = 0;
+  private deadCount = 0;
+
+  constructor(urls: string[]) {
+    for (const url of urls) this.add(url);
+  }
+
+  /* ---------------- TIME ---------------- */
+
+  private now() {
+    return Date.now();
+  }
+
+  private bucketOf(ts: number) {
+    return Math.floor(ts / BUCKET_MS);
+  }
+
+  /* ---------------- BUCKET OPS ---------------- */
+
+  private bucketAdd(bucket: number, url: string) {
+    let set = this.buckets.get(bucket);
+    if (!set) {
+      set = new Set();
+      this.buckets.set(bucket, set);
+    }
+    set.add(url);
+  }
+
+  private bucketRemove(bucket: number, url: string) {
+    const set = this.buckets.get(bucket);
+    if (!set) return;
+    set.delete(url);
+    if (set.size === 0) this.buckets.delete(bucket);
+  }
+
+  /* ---------------- TASK CREATE ---------------- */
+
+  private add(url: string, delay = 0) {
+    if (this.tasks.has(url)) return;
+    const now = this.now();
+
+    const t: Task = {
+      url,
+      attempts: 0,
+      leaseId: 0,
+      nextRunAt: now + delay,
+      state: State.READY,
+      bucket: this.bucketOf(now + delay),
+    };
+
+    t.inBucket = t.bucket;
+
+    this.tasks.set(url, t);
+    this.bucketAdd(t.bucket, url);
+
+    this.readyCount++;
+  }
+
+  /* ---------------- WATCHDOG (MANUAL TICK) ---------------- */
+
+  tickWatchdog(now: number): CrawlResult[] {
+    const terminalResults: CrawlResult[] = [];
+
+    for (const [url, t] of this.tasks.entries()) {
+      if (t.state !== State.LEASED || !t.leasedAt) continue;
+      if (now - t.leasedAt <= LEASE_TIMEOUT_MS) continue;
+
+      this.bucketRemove(t.inBucket!, url);
+      t.inBucket = undefined;
+
+      t.attempts++;
+
+      if (t.attempts >= MAX_ATTEMPTS) {
+        t.state = State.DEAD;
+        this.leasedCount--;
+        this.deadCount++;
+        terminalResults.push({
+          url,
+          pdpPrice: null,
+          cartPrice: null,
+          match: false,
+          status: 'FAIL',
+          reason: 'INTERNAL_ERROR',
+          detail: `Lease expired after ${MAX_ATTEMPTS} attempts`,
+          trace: [
+            {
+              step: 'worker',
+              status: 'ERROR',
+              message: `Lease expired after ${MAX_ATTEMPTS} attempts`,
+              bucket: 'INFRA_FAILURE',
+              ts: now,
+            },
+          ],
+        });
         continue;
       }
 
-      upsertResult(result);
+      const delay = 1000 * Math.pow(2, t.attempts);
+      t.nextRunAt = now + delay;
+      t.bucket = this.bucketOf(t.nextRunAt);
+      t.state = State.READY;
 
-      completed++;
-      console.log(`[PROGRESS] ${completed}/${urls.length}`);
+      this.leasedCount--;
+      this.readyCount++;
+
+      this.bucketAdd(t.bucket, url);
+      t.inBucket = t.bucket;
     }
-  };
 
-  const workers = Array.from({ length: params.concurrency }, () =>
-    worker().catch((err) => {
-      if (!isShuttingDown()) {
-        console.error('[WORKER LOOP ERROR]', err);
+    return terminalResults;
+  }
+
+  /* ---------------- GET NEXT ---------------- */
+
+  getNext(): TaskLease | null {
+    const now = this.now();
+    const currentBucket = this.bucketOf(now);
+    const dueBuckets = Array.from(this.buckets.keys())
+      .filter((bucket) => bucket <= currentBucket)
+      .sort((a, b) => a - b);
+
+    for (const bucket of dueBuckets) {
+      const set = this.buckets.get(bucket);
+      if (!set) continue;
+
+      for (const url of set) {
+        const t = this.tasks.get(url);
+        if (!t) continue;
+        if (t.state !== State.READY) continue;
+        if (t.nextRunAt > now) continue;
+
+        set.delete(url);
+        if (set.size === 0) this.buckets.delete(bucket);
+        t.inBucket = undefined;
+
+        t.state = State.LEASED;
+        t.leasedAt = now;
+        t.leaseId++;
+
+        this.readyCount--;
+        this.leasedCount++;
+
+        return { url, leaseId: t.leaseId };
       }
-    }),
+
+      if (set.size === 0) this.buckets.delete(bucket);
+    }
+
+    return null;
+  }
+
+  /* ---------------- RETRY ---------------- */
+
+  private scheduleRetry(url: string): void {
+    const t = this.tasks.get(url);
+    if (!t) return;
+
+    if (t.inBucket !== undefined) {
+      this.bucketRemove(t.inBucket, url);
+    }
+
+    const now = this.now();
+    const delay = 1000 * Math.pow(2, t.attempts);
+
+    t.nextRunAt = now + delay;
+    t.bucket = this.bucketOf(t.nextRunAt);
+    t.state = State.READY;
+
+    this.bucketAdd(t.bucket, url);
+    t.inBucket = t.bucket;
+
+    this.readyCount++;
+  }
+
+  /* ---------------- COMPLETE ---------------- */
+
+  complete(
+    url: string,
+    leaseId: number,
+    ok: boolean,
+    retryable: boolean,
+  ): boolean {
+    const t = this.tasks.get(url);
+    if (!t || t.state !== State.LEASED || t.leaseId !== leaseId) return false;
+
+    this.leasedCount--;
+    t.attempts++;
+
+    if (ok) {
+      t.state = State.DONE;
+      this.doneCount++;
+      return true;
+    }
+
+    if (retryable && t.attempts < MAX_ATTEMPTS && !isShuttingDown()) {
+      this.scheduleRetry(url);
+      return false;
+    }
+
+    t.state = State.DEAD;
+    this.deadCount++;
+    return true;
+  }
+
+  isIdle(): boolean {
+    return this.readyCount === 0 && this.leasedCount === 0;
+  }
+
+  stats() {
+    return {
+      ready: this.readyCount,
+      leased: this.leasedCount,
+      done: this.doneCount,
+      dead: this.deadCount,
+    };
+  }
+}
+
+/* ---------------- ENGINE ---------------- */
+
+export async function runConcurrentEngine(params: {
+  urls: (string | { url: string })[];
+  concurrency: number;
+}) {
+  if (!Number.isInteger(params.concurrency) || params.concurrency < 1) {
+    throw new Error('concurrency must be a positive integer');
+  }
+  const urls = normalizeUrls(params.urls);
+  if (urls.length === 0) {
+    await flushResults();
+    return;
+  }
+
+  const poolSize = resolvePoolSize(
+    params.concurrency,
+    process.env.CRAWL_BROWSER_POOL_SIZE,
   );
+  const pool = createBrowserPoolInstance(poolSize);
+  try {
+    if (!validateAsBrowserPool(pool)) throw new Error('Invalid pool');
+    await pool.init();
 
-  await Promise.all(workers);
+    const scheduler = new SchedulerV421(urls);
+    const stopWatchdog = startWatchdogSupervisor(scheduler, (result) => {
+      upsertResult(result);
+      logProgress(scheduler, urls.length);
+    });
+    const workers = Array.from({ length: poolSize }, async () => {
+      while (!isShuttingDown()) {
+        const lease = scheduler.getNext();
 
-  await flushResults();
-  await pool.close();
+        if (!lease) {
+          if (scheduler.isIdle()) return;
+          await new Promise((r) => setTimeout(r, 25));
+          continue;
+        }
+
+        const { url, leaseId } = lease;
+        let result: CrawlResult;
+
+        try {
+          result = await crawlWorker(url, pool);
+        } catch (e) {
+          result = {
+            url,
+            pdpPrice: null,
+            cartPrice: null,
+            match: false,
+            status: 'FAIL',
+            reason: 'CRAWL_FAILED',
+            trace: [
+              {
+                step: 'error',
+                status: 'ERROR',
+                message: String(e),
+                ts: Date.now(),
+              },
+            ],
+          };
+        }
+
+        const finalResult = scheduler.complete(
+          url,
+          leaseId,
+          result.status === 'OK',
+          isRetryable(result),
+        );
+
+        if (finalResult) {
+          upsertResult(result);
+          logProgress(scheduler, urls.length);
+        }
+      }
+    });
+
+    try {
+      await Promise.all(workers);
+      await flushResults();
+    } finally {
+      stopWatchdog();
+    }
+  } finally {
+    await pool.close();
+  }
+}
+
+function logProgress(scheduler: SchedulerV421, total: number): void {
+  const stats = scheduler.stats();
+  console.log(
+    `[PROGRESS] ${stats.done + stats.dead}/${total} ` +
+      `(ok=${stats.done} fail=${stats.dead})`,
+  );
 }
 
 export function installShutdownHandlers(): void {
   const onSignal = () => {
     if (isShuttingDown()) return;
-    console.log('\n[SHUTDOWN] stopping workers…');
+    console.log('\n[SHUTDOWN] stopping workers...');
     requestShutdown();
   };
 

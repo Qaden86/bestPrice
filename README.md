@@ -7,7 +7,7 @@ End-to-end pipeline for [bestprice.com.ua](https://bestprice.com.ua):
 - **Unit tests** — Vitest for parsing, validation, retry, and extractors.
 
 ```
-sitemap → URL filter → concurrent workers (browser pool) → crawl + validate → result store → dashboard (SSE)
+sitemap -> URL filter -> concurrent workers (browser pool) -> crawl + validate -> result store -> dashboard (SSE)
 ```
 
 ---
@@ -32,7 +32,7 @@ sitemap → URL filter → concurrent workers (browser pool) → crawl + validat
 ## Tech Stack
 
 | Tool                        | Purpose                               |
-|-----------------------------| ------------------------------------- |
+| --------------------------- | ------------------------------------- |
 | **Node.js (>=20 / lts/\*)** | Runtime                               |
 | **TypeScript**              | Static typing                         |
 | **Playwright**              | Browser automation (crawl + UI tests) |
@@ -139,6 +139,13 @@ cp .env.example .env.prod
 | `EXECUTION_MODE`              | `full`                           | `full` or `sample`                                                                    |
 | `SAMPLE_SIZE`                 | `100`                            | URLs to crawl in sample mode                                                          |
 | `CRAWL_CONCURRENCY`           | `3` (stage) / `5` (prod)         | Worker count                                                                          |
+| `CRAWL_BROWSER_POOL_SIZE`     | worker count                     | Reused Chromium processes; also caps active crawl workers                             |
+| `CRAWL_BROWSER_ROTATE_AFTER`  | `200`                            | Relaunch each pooled browser after this many completed jobs                           |
+| `CRAWL_JOB_TIMEOUT_MS`        | `120000`                         | Total deadline for one crawl attempt                                                  |
+| `CRAWL_LEASE_TIMEOUT_MS`      | `150000`                         | Scheduler recovery threshold; keep above the job deadline                             |
+| `CRAWL_RUN_RETENTION`         | `50`                             | Number of archived runs retained locally                                              |
+| `SITEMAP_REQUEST_TIMEOUT_MS`  | `15000`                          | Sitemap HTTP request timeout                                                          |
+| `DASHBOARD_HOST`              | `127.0.0.1`                      | Dashboard bind address; localhost by default                                          |
 | `CRAWL_SCREENSHOTS`           | `true` (sample) / `false` (full) | Failure screenshots. Set `true`/`false` to override the default for the current mode. |
 | `CRAWL_SCREENSHOT_TIMEOUT_MS` | `8000`                           | Viewport-only screenshot timeout                                                      |
 | `CRAWL_SMOKE_STRICT`          | `false`                          | If `true`, the E2E smoke spec asserts an OK result with matching cart price           |
@@ -167,13 +174,13 @@ CRAWL_SCREENSHOTS=false CRAWL_CONCURRENCY=10 npm run crawl:prod:full
 
 Output:
 
-- Live stream → `data/results.ndjson`
+- Live stream -> `data/results.ndjson`
 - Previous run is archived to `data/runs/<runId>/` (with `results.ndjson` + `manifest.json`) before each new run starts.
 - `Ctrl-C` triggers a cooperative shutdown — partial results stay on disk.
 
 ### URL-level retry
 
-The engine retries each URL up to **3 attempts** when it fails with a transient reason (`NAVIGATION_FAILED`, `CART_NOT_READY`, `CRAWL_FAILED`, `INTERNAL_ERROR`). Non-transient failures (`PRICE_MISMATCH`, `SELECTOR_NOT_FOUND`, `MISSING_PRICE`, `PRICE_IS_ZERO`, `ADD_TO_CART_FAILED`) are not retried — they reflect real product/page state. See `crawler/engine/concurrentEngine.ts`.
+The engine retries each URL up to **3 attempts** when it fails with a transient reason (`NAVIGATION_FAILED`, `CART_NOT_READY`, `CRAWL_FAILED`, `INTERNAL_ERROR`). Each attempt has a total deadline and a unique scheduler lease, so an expired attempt cannot finalize a newer retry. Non-transient failures (`PRICE_MISMATCH`, `SELECTOR_NOT_FOUND`, `MISSING_PRICE`, `PRICE_IS_ZERO`, `ADD_TO_CART_FAILED`) are not retried.
 
 ### Sitemap-only price audit
 
@@ -183,7 +190,7 @@ npx tsx scripts/check-sitemap-prices.ts
 
 Skips PDP rendering — uses sitemap + JSON-LD extraction only. Useful for fast price-presence checks.
 
-### Single URL diagnostics
+### Single URL Diagnostics
 
 ```bash
 npx tsx scripts/diagnose-product.ts <product-url>
@@ -215,7 +222,7 @@ The UI surfaces:
 
 - TOTAL / SUCCESS RATE / FAIL RATE / CART FAIL RATE
 - **Top failing steps** (e.g. `pdp.extract`, `cart.click`)
-- **Trace bucket distribution** (`INFRA_FAILURE`, `DOM_DRIFT`, `BUSINESS_LOGIC_FAIL`, …)
+- **Trace bucket distribution** (`INFRA_FAILURE`, `DOM_DRIFT`, `BUSINESS_LOGIC_FAIL`, ...)
 - Filtering by status / reason
 - Run selector & run comparison
 - Per-row trace inspector modal
@@ -269,10 +276,10 @@ Report output: allure-report-playwright
 
 Pipeline flow:
 Clean previous results
-Run Vitest unit tests → allure-results-vitest
-Run Playwright E2E tests → allure-results
-Generate unit report → allure-report-vitest
-Generate e2e report → allure-report-playwright
+Run Vitest unit tests -> allure-results-vitest
+Run Playwright E2E tests -> allure-results
+Generate unit report -> allure-report-vitest
+Generate e2e report -> allure-report-playwright
 
 ## Page Object Model
 
@@ -310,18 +317,18 @@ Single GitHub Actions workflow: `.github/workflows/ci.yml`.
 
 ### PR gating (every push / pull request)
 
-| Job | What runs |
-|-----|-----------|
-| **unit** | `npm run typecheck` + `npm run test:unit` (Vitest) |
+| Job            | What runs                                                                                             |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| **unit**       | `npm run typecheck` + `npm run test:unit` (Vitest)                                                    |
 | **playwright** | header UI, sitemap smoke (`SITEMAP_LIMIT=25`), crawl contract smoke (`tests/e2e/crawl.smoke.spec.ts`) |
 
 The `integration` job is **skipped** on push/PR — this is deliberate, not a misconfiguration.
 
 ### Manual / pre-release
 
-| Job | How to run |
-|-----|------------|
-| **integration** | GitHub → *Actions* → *CI* → *Run workflow* — full browser crawl with strict `OK` + price match (`tests/integration`) |
+| Job             | How to run                                                                                                              |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **integration** | GitHub -> _Actions_ -> _CI_ -> _Run workflow_ — full browser crawl with strict `OK` + price match (`tests/integration`) |
 
 Use `CRAWL_SMOKE_STRICT=true` locally before promoting to verify strict success against the target product.
 
@@ -346,15 +353,15 @@ The crawl is still progressing (`[PROGRESS]` keeps counting) but failure handlin
 
 The engine retries transient failures up to 3 times — if it still fails, the site is likely throttling. Lower `CRAWL_CONCURRENCY` and check `data/results.ndjson` for the per-attempt trace.
 
-### Dashboard shows no data
+### Dashboard Shows No Data
 
 - Make sure a crawl has produced `data/results.ndjson`.
 - Or pick a past run from the **Run** selector — archived runs live under `data/runs/`.
 
-### `cartFailureRate` looks wrong
+### `cartFailureRate` Looks Wrong
 
 It counts both `ADD_TO_CART_FAILED` rows and rows missing a `cartPrice`. If you want only the explicit fails, filter by reason `ADD_TO_CART_FAILED` in the table.
 
-### Ctrl-C left a half-written `results.ndjson`
+### Ctrl-C Left A Half-Written `results.ndjson`
 
 That's expected — partial results are kept on disk; the run is marked interrupted and won't be archived. Re-run when you're ready.

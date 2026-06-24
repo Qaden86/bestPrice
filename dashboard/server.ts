@@ -10,6 +10,8 @@ import { DATA_DIR, RUNS_DIR } from '../config/path';
 const app = express();
 app.use(express.json());
 const PORT = 3000;
+const HOST = process.env.DASHBOARD_HOST ?? '127.0.0.1';
+const RUN_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 type ActiveRun = {
   env: 'stage' | 'prod';
@@ -40,11 +42,19 @@ app.get('/api/runs', (_req, res) => {
 });
 
 app.get('/api/runs/:runId/results', (req, res) => {
+  if (!RUN_ID_PATTERN.test(req.params.runId)) {
+    res.status(400).json({ error: 'Invalid run ID' });
+    return;
+  }
   const filePath = path.join(RUNS_DIR, req.params.runId, 'results.ndjson');
   res.json(normalizeRows(loadResultsFromFile(filePath)));
 });
 
 app.get('/api/runs/:runId/stats', (req, res) => {
+  if (!RUN_ID_PATTERN.test(req.params.runId)) {
+    res.status(400).json({ error: 'Invalid run ID' });
+    return;
+  }
   const filePath = path.join(RUNS_DIR, req.params.runId, 'results.ndjson');
   res.json(statsFromRows(loadResultsFromFile(filePath)));
 });
@@ -57,6 +67,13 @@ app.get('/api/runs/compare', (req, res) => {
     res
       .status(400)
       .json({ error: 'Query params a and b (runId) are required' });
+    return;
+  }
+  if (
+    (a !== 'current' && !RUN_ID_PATTERN.test(a)) ||
+    (b !== 'current' && !RUN_ID_PATTERN.test(b))
+  ) {
+    res.status(400).json({ error: 'Invalid run ID' });
     return;
   }
 
@@ -184,8 +201,8 @@ app.use((_req, res) => {
   res.sendFile(INDEX_HTML);
 });
 
-app.listen(PORT, () => {
-  console.log(`Dashboard: http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Dashboard: http://${HOST}:${PORT}`);
 });
 
 function getUrl(r: { url?: unknown }): string {

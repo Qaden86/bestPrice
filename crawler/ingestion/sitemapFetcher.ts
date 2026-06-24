@@ -20,7 +20,10 @@ export async function getSitemapUrls(
 
   console.log('[SITEMAP]', sitemapUrl);
 
-  const res = await axios.get(sitemapUrl);
+  const timeout = Number(process.env.SITEMAP_REQUEST_TIMEOUT_MS ?? 15_000);
+  const res = await axios.get(sitemapUrl, {
+    timeout: Number.isFinite(timeout) && timeout > 0 ? timeout : 15_000,
+  });
 
   const parsed = await xml2js.parseStringPromise(res.data, {
     explicitArray: false,

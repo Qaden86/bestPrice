@@ -1,7 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
-import { DATA_DIR, RESULTS_PATH, RUNS_DIR } from '../../config/path';
+import {
+  ARCHIVE_MARKER_PATH,
+  DATA_DIR,
+  RESULTS_PATH,
+  RUNS_DIR,
+} from '../../config/path';
 import { readNdjson } from './readNdjson';
 
 export type RunManifest = {
@@ -19,6 +24,16 @@ export function archiveCurrentRunIfAny(): string | null {
 
   const stat = fs.statSync(RESULTS_PATH);
   if (stat.size === 0) return null;
+  const signature = `${stat.size}:${stat.mtimeMs}`;
+
+  if (fs.existsSync(ARCHIVE_MARKER_PATH)) {
+    try {
+      const marker = JSON.parse(fs.readFileSync(ARCHIVE_MARKER_PATH, 'utf-8'));
+      if (marker.signature === signature) return null;
+    } catch {
+      // Invalid markers are ignored and replaced after a successful archive.
+    }
+  }
 
   const runId = stat.mtime.toISOString().replace(/[:.]/g, '-');
   const destDir = path.join(RUNS_DIR, runId);
@@ -34,6 +49,7 @@ export function archiveCurrentRunIfAny(): string | null {
     JSON.stringify(manifest, null, 2),
     'utf-8',
   );
+  fs.rmSync(ARCHIVE_MARKER_PATH, { force: true });
 
   return runId;
 }
@@ -56,6 +72,27 @@ export function writeRunManifest(runId: string, startedAt: string): void {
     JSON.stringify(manifest, null, 2),
     'utf-8',
   );
+
+  const stat = fs.statSync(RESULTS_PATH);
+  fs.writeFileSync(
+    ARCHIVE_MARKER_PATH,
+    JSON.stringify({ runId, signature: `${stat.size}:${stat.mtimeMs}` }),
+    'utf-8',
+  );
+}
+
+export function pruneArchivedRuns(keep = 50): void {
+  if (!Number.isInteger(keep) || keep < 1 || !fs.existsSync(RUNS_DIR)) return;
+  const directories = fs
+    .readdirSync(RUNS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()
+    .reverse();
+
+  for (const runId of directories.slice(keep)) {
+    fs.rmSync(path.join(RUNS_DIR, runId), { recursive: true, force: true });
+  }
 }
 
 function buildManifest(

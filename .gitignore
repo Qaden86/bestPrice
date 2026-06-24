@@ -11,6 +11,8 @@ playwright/.cache/
 data/screenshots/
 data/runs/
 data/results.ndjson
+data/results*.ndjson
+data/.archived-result.json
 data/results.json
 data/*.log
 .playwright-mcp/

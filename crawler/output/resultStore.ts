@@ -7,23 +7,22 @@ import type { CrawlResult } from '../types/CrawlResult';
 export const resultBus = new EventEmitter();
 
 const writeQueue: string[] = [];
-let drainActive = false;
+let drainPromise: Promise<void> | null = null;
 
-async function drainQueue(): Promise<void> {
-  if (drainActive) return;
-  drainActive = true;
-
-  try {
-    while (writeQueue.length > 0) {
-      const batch = writeQueue.splice(0, 100).join('');
-      await fsp.appendFile(RESULTS_PATH, batch, 'utf-8');
-    }
-  } finally {
-    drainActive = false;
-    if (writeQueue.length > 0) {
-      void drainQueue();
-    }
+function drainQueue(): Promise<void> {
+  if (!drainPromise) {
+    drainPromise = (async () => {
+      while (writeQueue.length > 0) {
+        const batchSize = Math.min(writeQueue.length, 100);
+        const batch = writeQueue.slice(0, batchSize).join('');
+        await fsp.appendFile(RESULTS_PATH, batch, 'utf-8');
+        writeQueue.splice(0, batchSize);
+      }
+    })().finally(() => {
+      drainPromise = null;
+    });
   }
+  return drainPromise;
 }
 
 export function upsertResult(result: CrawlResult): void {
@@ -35,11 +34,17 @@ export function upsertResult(result: CrawlResult): void {
 
   resultBus.emit('update', result);
   writeQueue.push(JSON.stringify(result) + '\n');
-  void drainQueue();
+  void drainQueue().catch((error) => {
+    console.error('[RESULT STORE] write failed:', error);
+  });
 }
 
 export function flushResults(): Promise<void> {
-  return drainQueue();
+  return (async () => {
+    while (drainPromise || writeQueue.length > 0) {
+      await drainQueue();
+    }
+  })();
 }
 
 export function pendingWriteCount(): number {

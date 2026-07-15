@@ -5,10 +5,9 @@
 
 import { test, expect } from '@playwright/test';
 import { crawl } from '../../crawler/crawl';
-import { BASE_URL } from '../../config/env';
+import { getTestConfig } from '../../config/testConfig';
 
-const base = BASE_URL.replace(/\/+$/, '');
-const SAMPLE_PRODUCT_URL = `${base}/produkt/otvertka-49108-stal-sl5x75`;
+const { productUrl: SAMPLE_PRODUCT_URL } = getTestConfig();
 
 test('crawl product page with matching PDP and cart prices', async ({
   page,

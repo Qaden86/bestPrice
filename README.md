@@ -135,6 +135,12 @@ cp .env.example .env.prod
 | Variable                      | Default                          | Description                                                                           |
 | ----------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
 | `BASE_URL`                    | `https://bestprice.com.ua`       | Site origin used by the crawler & Playwright tests                                    |
+| `TEST_ENV`                    | `stage`                          | Playwright profile: `stage` or `prod`                                                 |
+| `TEST_PRODUCT_SLUG`           | sample product slug              | Product fixture used by crawl smoke and integration tests; required in CI             |
+| `PW_RETRIES`                  | profile default                  | Playwright retries override (`0`–`5`)                                                 |
+| `PW_WORKERS`                  | profile default                  | Playwright workers override (`1`–`20`)                                                |
+| `PW_ACTION_TIMEOUT_MS`        | profile default                  | Playwright action timeout override                                                    |
+| `PW_NAVIGATION_TIMEOUT_MS`    | profile default                  | Playwright navigation timeout override                                                |
 | `NODE_ENV`                    | `stage`                          | `stage` or `prod` (drives default concurrency)                                        |
 | `EXECUTION_MODE`              | `full`                           | `full` or `sample`                                                                    |
 | `SAMPLE_SIZE`                 | `100`                            | URLs to crawl in sample mode                                                          |
@@ -151,6 +157,11 @@ cp .env.example .env.prod
 | `CRAWL_SMOKE_STRICT`          | `false`                          | If `true`, the E2E smoke spec asserts an OK result with matching cart price           |
 
 Concurrency precedence: `CRAWL_CONCURRENCY` env var > environment default (`stage`/`prod`). See `config/executionConfig.ts`.
+
+Playwright settings are resolved by `config/testConfig.ts`. Local runs use the
+documented defaults; CI must provide both `BASE_URL` and `TEST_PRODUCT_SLUG`.
+Invalid environments, URLs, product slugs, timeout values, retries, and worker
+counts fail immediately before the test run starts.
 
 ---
 
@@ -195,6 +206,9 @@ Skips PDP rendering — uses sitemap + JSON-LD extraction only. Useful for fast 
 ```bash
 npx tsx scripts/diagnose-product.ts <product-url>
 ```
+
+When the URL argument is omitted, the script uses the centralized
+`BASE_URL` + `TEST_PRODUCT_SLUG` fixture.
 
 ---
 

@@ -160,7 +160,8 @@ cp .env.example .env.prod
 Concurrency precedence: `CRAWL_CONCURRENCY` env var > environment default (`stage`/`prod`). See `config/executionConfig.ts`.
 
 Playwright settings are resolved by `config/testConfig.ts`. Local runs use the
-documented defaults; CI must provide both `BASE_URL` and `TEST_PRODUCT_SLUG`.
+selected `.env.stage` or `.env.prod` file; CI must provide both `BASE_URL` and
+`TEST_PRODUCT_SLUG` directly.
 Invalid environments, URLs, product slugs, timeout values, retries, and worker
 counts fail immediately before the test run starts.
 The CI workflow targets the live site with the conservative `prod` profile.
@@ -247,14 +248,19 @@ The UI surfaces:
 
 ## Running Tests
 
-| Command                    | What                                                  |
-| -------------------------- | ----------------------------------------------------- |
-| `npm test`                 | Vitest unit tests (`tests/unit/**`)                   |
-| `npm run test:integration` | Playwright integration tests (`tests/integration/**`) |
-| `npm run test:e2e`         | e2e Playwright tests                                  |
-| `npm run test:header`      | Header UI tests (desktop + mobile)                    |
-| `npm run test:sitemap`     | Sitemap E2E                                           |
-| `npm run test:all`         | Vitest + Playwright                                   |
+| Command                    | What                                 |
+| -------------------------- | ------------------------------------ |
+| `npm test`                 | Vitest unit tests (`tests/unit/**`)  |
+| `npm run test:integration` | Integration tests using `.env.stage` |
+| `npm run test:e2e`         | E2E tests using `.env.stage`         |
+| `npm run test:header`      | Header tests using `.env.stage`      |
+| `npm run test:sitemap`     | Sitemap tests using `.env.stage`     |
+| `npm run test:all`         | Vitest + Playwright                  |
+
+Every Playwright command has an explicit `:stage` and `:prod` variant. For
+example, use `npm run test:e2e:stage` or `npm run test:e2e:prod`. The unsuffixed
+commands are safe aliases for their `:stage` variants; they never load
+`.env.prod` implicitly.
 
 The Playwright crawl smoke (`tests/e2e/crawl.smoke.spec.ts`) runs in **contract mode** by default — asserts the pipeline produces a navigable result with a PDP price and cart-click attempt, without requiring an OK status. Set `CRAWL_SMOKE_STRICT=true` to assert a full OK + matching cart price (use when the target product is known good).
 

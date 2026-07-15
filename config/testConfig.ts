@@ -109,10 +109,22 @@ export function getTestConfig(
     profile.testTimeoutMs,
     { min: 1_000, max: 300_000 },
   );
+  const actionTimeoutMs = parseInteger(
+    'PW_ACTION_TIMEOUT_MS',
+    env.PW_ACTION_TIMEOUT_MS,
+    profile.actionTimeoutMs,
+    { min: 1_000, max: 120_000 },
+  );
 
   if (testTimeoutMs <= navigationTimeoutMs) {
     throw new Error(
       'PW_TEST_TIMEOUT_MS must be greater than PW_NAVIGATION_TIMEOUT_MS',
+    );
+  }
+
+  if (actionTimeoutMs >= testTimeoutMs) {
+    throw new Error(
+      'PW_ACTION_TIMEOUT_MS must be less than PW_TEST_TIMEOUT_MS',
     );
   }
 
@@ -130,12 +142,7 @@ export function getTestConfig(
       max: 20,
     }),
     testTimeoutMs,
-    actionTimeoutMs: parseInteger(
-      'PW_ACTION_TIMEOUT_MS',
-      env.PW_ACTION_TIMEOUT_MS,
-      profile.actionTimeoutMs,
-      { min: 1_000, max: 120_000 },
-    ),
+    actionTimeoutMs,
     navigationTimeoutMs,
   };
 }

@@ -75,4 +75,13 @@ describe('Playwright test configuration', () => {
       'PW_TEST_TIMEOUT_MS must be greater than PW_NAVIGATION_TIMEOUT_MS',
     );
   });
+
+  it('rejects an action timeout that cannot fit within the test timeout', () => {
+    expect(() =>
+      getTestConfig({
+        PW_TEST_TIMEOUT_MS: '60000',
+        PW_ACTION_TIMEOUT_MS: '60000',
+      }),
+    ).toThrow('PW_ACTION_TIMEOUT_MS must be less than PW_TEST_TIMEOUT_MS');
+  });
 });

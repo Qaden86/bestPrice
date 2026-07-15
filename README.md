@@ -139,6 +139,7 @@ cp .env.example .env.prod
 | `TEST_PRODUCT_SLUG`           | sample product slug              | Product fixture used by crawl smoke and integration tests; required in CI             |
 | `PW_RETRIES`                  | profile default                  | Playwright retries override (`0`–`5`)                                                 |
 | `PW_WORKERS`                  | profile default                  | Playwright workers override (`1`–`20`)                                                |
+| `PW_TEST_TIMEOUT_MS`          | profile default                  | Overall test timeout; must exceed the navigation timeout                              |
 | `PW_ACTION_TIMEOUT_MS`        | profile default                  | Playwright action timeout override                                                    |
 | `PW_NAVIGATION_TIMEOUT_MS`    | profile default                  | Playwright navigation timeout override                                                |
 | `NODE_ENV`                    | `stage`                          | `stage` or `prod` (drives default concurrency)                                        |

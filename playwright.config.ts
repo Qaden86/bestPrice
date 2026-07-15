@@ -14,6 +14,7 @@ export default defineConfig({
 
   reporter: [['list'], ['allure-playwright']],
 
+  timeout: testConfig.testTimeoutMs,
   retries: testConfig.retries,
   workers: testConfig.workers,
 

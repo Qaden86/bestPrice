@@ -9,6 +9,7 @@ export interface TestConfig {
   productUrl: string;
   retries: number;
   workers: number;
+  testTimeoutMs: number;
   actionTimeoutMs: number;
   navigationTimeoutMs: number;
 }
@@ -19,18 +20,24 @@ const PROFILES: Record<
   TestEnvironment,
   Pick<
     TestConfig,
-    'retries' | 'workers' | 'actionTimeoutMs' | 'navigationTimeoutMs'
+    | 'retries'
+    | 'workers'
+    | 'testTimeoutMs'
+    | 'actionTimeoutMs'
+    | 'navigationTimeoutMs'
   >
 > = {
   stage: {
     retries: 1,
     workers: 2,
+    testTimeoutMs: 60_000,
     actionTimeoutMs: 15_000,
     navigationTimeoutMs: 45_000,
   },
   prod: {
     retries: 2,
     workers: 1,
+    testTimeoutMs: 90_000,
     actionTimeoutMs: 20_000,
     navigationTimeoutMs: 60_000,
   },
@@ -90,6 +97,24 @@ export function getTestConfig(
     env.TEST_PRODUCT_SLUG,
     env.CI === 'true',
   );
+  const navigationTimeoutMs = parseInteger(
+    'PW_NAVIGATION_TIMEOUT_MS',
+    env.PW_NAVIGATION_TIMEOUT_MS,
+    profile.navigationTimeoutMs,
+    { min: 1_000, max: 180_000 },
+  );
+  const testTimeoutMs = parseInteger(
+    'PW_TEST_TIMEOUT_MS',
+    env.PW_TEST_TIMEOUT_MS,
+    profile.testTimeoutMs,
+    { min: 1_000, max: 300_000 },
+  );
+
+  if (testTimeoutMs <= navigationTimeoutMs) {
+    throw new Error(
+      'PW_TEST_TIMEOUT_MS must be greater than PW_NAVIGATION_TIMEOUT_MS',
+    );
+  }
 
   return {
     environment,
@@ -104,17 +129,13 @@ export function getTestConfig(
       min: 1,
       max: 20,
     }),
+    testTimeoutMs,
     actionTimeoutMs: parseInteger(
       'PW_ACTION_TIMEOUT_MS',
       env.PW_ACTION_TIMEOUT_MS,
       profile.actionTimeoutMs,
       { min: 1_000, max: 120_000 },
     ),
-    navigationTimeoutMs: parseInteger(
-      'PW_NAVIGATION_TIMEOUT_MS',
-      env.PW_NAVIGATION_TIMEOUT_MS,
-      profile.navigationTimeoutMs,
-      { min: 1_000, max: 180_000 },
-    ),
+    navigationTimeoutMs,
   };
 }

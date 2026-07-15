@@ -163,6 +163,7 @@ Playwright settings are resolved by `config/testConfig.ts`. Local runs use the
 documented defaults; CI must provide both `BASE_URL` and `TEST_PRODUCT_SLUG`.
 Invalid environments, URLs, product slugs, timeout values, retries, and worker
 counts fail immediately before the test run starts.
+The CI workflow targets the live site with the conservative `prod` profile.
 
 ---
 

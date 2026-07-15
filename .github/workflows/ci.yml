@@ -8,7 +8,7 @@ name: CI
 
 env:
   BASE_URL: https://bestprice.com.ua
-  TEST_ENV: stage
+  TEST_ENV: prod
   TEST_PRODUCT_SLUG: otvertka-49108-stal-sl5x75
 
 on:

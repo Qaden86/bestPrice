@@ -2,10 +2,9 @@
  * One-off PDP/cart price diagnostic for a product URL.
  */
 import { chromium } from 'playwright';
+import { getTestConfig } from '../config/testConfig';
 
-const url =
-  process.argv[2] ??
-  'https://bestprice.com.ua/produkt/otvertka-49108-stal-sl5x75';
+const url = process.argv[2] ?? getTestConfig().productUrl;
 
 async function main() {
   const browser = await chromium.launch({ headless: true });

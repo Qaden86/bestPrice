@@ -6,6 +6,11 @@
 
 name: CI
 
+env:
+  BASE_URL: https://bestprice.com.ua
+  TEST_ENV: prod
+  TEST_PRODUCT_SLUG: otvertka-49108-stal-sl5x75
+
 on:
   push:
     branches: [main, master]
@@ -36,8 +41,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:header
-      - run: npm run test:sitemap
+      - run: npx playwright test tests/header
+      - run: npx playwright test tests/e2e/sitemap.spec.ts
         env:
           SITEMAP_LIMIT: 25
       - run: npx playwright test tests/e2e/crawl.smoke.spec.ts
@@ -54,4 +59,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:integration
+      - run: npx playwright test tests/integration

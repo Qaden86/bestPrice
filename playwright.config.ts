@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
+import { getTestConfig } from './config/testConfig';
+
+const testConfig = getTestConfig();
 
 export default defineConfig({
   testDir: './tests',
@@ -11,9 +14,15 @@ export default defineConfig({
 
   reporter: [['list'], ['allure-playwright']],
 
+  timeout: testConfig.testTimeoutMs,
+  retries: testConfig.retries,
+  workers: testConfig.workers,
+
   use: {
-    baseURL: 'https://bestprice.com.ua/',
+    baseURL: testConfig.baseUrl,
     headless: true,
+    actionTimeout: testConfig.actionTimeoutMs,
+    navigationTimeout: testConfig.navigationTimeoutMs,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

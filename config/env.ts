@@ -1,11 +1,6 @@
-/**
- * Environment-derived constants and helpers used by the sitemap price-check
- * pipeline and integration tests.
- */
+import { getAppConfig } from './appConfig';
 
-export const BASE_URL = (
-  process.env.BASE_URL ?? 'https://bestprice.com.ua'
-).replace(/\/+$/, '');
+export const BASE_URL = getAppConfig().baseUrl;
 
 export const SITEMAP_REQUEST_TIMEOUT_MS = Number(
   process.env.SITEMAP_REQUEST_TIMEOUT_MS ?? 15000,

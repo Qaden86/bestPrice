@@ -7,7 +7,7 @@ type Fixtures = {
 
 export const test = base.extend<Fixtures>({
   header: async ({ page }, use) => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'load' });
     const header = new Header(page);
     await header.expectLoaded();
     await use(header);

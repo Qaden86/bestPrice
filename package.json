@@ -2,6 +2,9 @@
   "name": "bestprice",
   "version": "1.0.0",
   "description": "End-to-end test automation framework for bestprice.com.ua built with TypeScript and Playwright.",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "crawl:stage": "dotenv -e .env.stage -- tsx scripts/run-crawl.ts",
     "crawl:prod": "dotenv -e .env.prod -- tsx scripts/run-crawl.ts",

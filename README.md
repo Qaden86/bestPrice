@@ -134,7 +134,7 @@ bestPrice/
 
 ## Installation
 
-Requirements: Node.js 20.19.0 or newer within the Node 20 release line, or Node.js 22.12.0 or newer; npm; and Chromium for browser-based checks. The repository's `.nvmrc` selects the verified Node 20.19.0 baseline.
+Requirements: Node.js 20.19.0 or newer within the Node 20 release line, or Node.js 22.13.0 or newer; npm; and Chromium for browser-based checks. The repository's `.nvmrc` selects the verified Node 20.19.0 baseline.
 
 ```bash
 git clone https://github.com/Qaden86/bestPrice.git
@@ -177,6 +177,9 @@ These commands are defined in `package.json`:
 | `npm run test:sitemap`     | Stage sitemap spec                                    |
 | `npm run test:all`         | Unit, integration, E2E, and header suites in sequence |
 | `npm run typecheck`        | TypeScript check without emitting files               |
+| `npm run lint`             | Type-aware ESLint checks                              |
+| `npm run lint:fix`         | Apply ESLint's safe automatic fixes                   |
+| `npm run format:check`     | Validate formatting with Prettier                     |
 | `npm run format`           | Format the repository with Prettier                   |
 
 Playwright commands also have explicit `:stage` and `:prod` variants, such as:
@@ -233,11 +236,11 @@ Crawl results are appended to `data/results.ndjson`. Completed runs are archived
 
 | Job           | Trigger                    | Checks                                                                         |
 | ------------- | -------------------------- | ------------------------------------------------------------------------------ |
-| `unit`        | Push, pull request, manual | Install, TypeScript check, Vitest unit suite                                   |
+| `quality`     | Push, pull request, manual | Install, TypeScript check, ESLint, Prettier validation, Vitest unit suite      |
 | `playwright`  | Push, pull request, manual | Chromium install, header suite, 25-product sitemap smoke, crawl contract smoke |
 | `integration` | Manual only                | Strict live PDP-to-cart crawl integration                                      |
 
-The workflow validates the live production URL. Integration is deliberately not a pull-request gate because its strict price assertion depends on current storefront data.
+Every push and pull request is gated by TypeScript type checking, ESLint, Prettier formatting validation, unit tests, and the existing Playwright smoke checks. The workflow validates the live production URL. Integration is deliberately not a pull-request gate because its strict price assertion depends on current storefront data.
 
 ## Reliability Features
 
@@ -257,7 +260,6 @@ Current, evidence-based gaps that would strengthen the project:
 
 - add coverage reporting and enforce an agreed minimum threshold in CI;
 - publish Allure reports or other test artifacts from GitHub Actions;
-- add linting alongside TypeScript and Prettier checks;
 - add deterministic integration coverage against controlled fixtures or a test environment to reduce dependence on live data;
 - add tests for dashboard API endpoints and SSE behavior;
 - add automated dependency and security scanning;

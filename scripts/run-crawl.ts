@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   }
 }
 
-(async () => {
+void (async () => {
   try {
     await main();
     process.exit(isShuttingDown() ? 130 : 0);

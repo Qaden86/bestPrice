@@ -51,7 +51,7 @@ test('crawl e2e smoke', async () => {
     if (strictSmoke) {
       assertStrictSuccess(result);
     } else if (result.status === 'FAIL') {
-      test.info().attach('crawl-fail-reason', {
+      await test.info().attach('crawl-fail-reason', {
         body: JSON.stringify(
           { reason: result.reason, trace: result.trace },
           null,

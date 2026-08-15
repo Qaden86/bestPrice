@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "End-to-end test automation framework for bestprice.com.ua built with TypeScript and Playwright.",
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": "^20.19.0 || >=22.13.0"
   },
   "scripts": {
     "crawl:stage": "dotenv -e .env.stage -- tsx scripts/run-crawl.ts",
@@ -14,6 +14,9 @@
     "crawl:prod:full": "EXECUTION_MODE=full dotenv -e .env.prod -- tsx scripts/run-crawl.ts",
     "dashboard": "tsx dashboard/server.ts",
     "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -47,6 +50,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.59.1",
     "@types/express": "^5.0.6",
     "@types/node": "^25.7.0",
@@ -55,8 +59,12 @@
     "allure-playwright": "^3.10.0",
     "allure-vitest": "^3.10.0",
     "dotenv-cli": "^11.0.0",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-playwright": "^2.11.0",
     "prettier": "^3.8.3",
     "tsx": "^4.21.0",
+    "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.9"
   },
   "dependencies": {

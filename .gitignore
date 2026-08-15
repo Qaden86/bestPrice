@@ -1,4 +1,7 @@
 node_modules/
+/tmp/
+/output/
+/coverage/
 playwright-report/
 test-results/
 blob-report/

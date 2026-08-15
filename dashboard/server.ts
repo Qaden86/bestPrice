@@ -9,7 +9,7 @@ import { DATA_DIR, RUNS_DIR } from '../config/path';
 
 const app = express();
 app.use(express.json());
-const PORT = 3000;
+const PORT = Number(process.env.DASHBOARD_PORT ?? 3000);
 const HOST = process.env.DASHBOARD_HOST ?? '127.0.0.1';
 const RUN_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 

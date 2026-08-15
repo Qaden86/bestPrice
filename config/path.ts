@@ -4,7 +4,9 @@ import path from 'path';
  * Centralized filesystem paths
  */
 
-export const DATA_DIR = path.resolve(process.cwd(), 'data');
+export const DATA_DIR = path.resolve(
+  process.env.BESTPRICE_DATA_DIR ?? path.resolve(process.cwd(), 'data'),
+);
 
 export const RESULTS_PATH = path.resolve(DATA_DIR, 'results.ndjson');
 

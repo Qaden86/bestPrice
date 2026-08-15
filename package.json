@@ -25,6 +25,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",
+    "test:api": "playwright test --config=playwright.api.config.ts",
     "test:integration": "npm run test:integration:stage",
     "test:integration:stage": "dotenv -e .env.stage -- env TEST_ENV=stage playwright test tests/integration",
     "test:integration:prod": "dotenv -e .env.prod -- env TEST_ENV=prod playwright test tests/integration",

@@ -1,0 +1,2 @@
+{"url":"https://bestprice.com.ua/product/current-ok","status":"OK","reason":"OK","pdpPrice":100,"cartPrice":100,"match":true,"trace":[]}
+{"url":"https://bestprice.com.ua/product/current-mismatch","status":"FAIL","reason":"PRICE_MISMATCH","pdpPrice":100,"cartPrice":110,"match":false,"trace":[{"step":"VALIDATE_PRICE","status":"ERROR","bucket":"BUSINESS_LOGIC_FAIL"}]}

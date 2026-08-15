@@ -9,6 +9,7 @@ const playwrightTestFiles = [
   'tests/e2e/**/*.spec.ts',
   'tests/header/**/*.spec.ts',
   'tests/integration/**/*.spec.ts',
+  'tests/api/**/*.api.spec.ts',
 ];
 
 export default defineConfig([

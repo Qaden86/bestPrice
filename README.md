@@ -207,6 +207,36 @@ npm run test:allure
 
 Use the `allure:generate:*` and `allure:open:*` scripts in `package.json` to generate or open the separate Vitest and Playwright reports.
 
+## Docker
+
+Docker provides the project dependencies and the matching Playwright Chromium build, so only Docker is required on the host. The image runs as the non-root Playwright user.
+
+Build the pinned Playwright 1.60.0 image and run the deterministic quality gate:
+
+```bash
+npm run docker:build
+npm run docker:quality
+```
+
+Run the same live smoke coverage used by CI: the header suite, a 25-product sitemap check, and the crawl contract smoke:
+
+```bash
+npm run docker:smoke
+```
+
+The image contains the public production defaults used by CI. Override them at runtime when needed:
+
+```bash
+docker run --rm --init --ipc=host \
+  -e BASE_URL=https://bestprice.com.ua \
+  -e TEST_ENV=prod \
+  -e TEST_PRODUCT_SLUG=otvertka-49108-stal-sl5x75 \
+  -e SITEMAP_LIMIT=25 \
+  bestprice-tests npm run test:smoke
+```
+
+Real `.env.stage` and `.env.prod` files are excluded from the image. The default Docker smoke command does not run the full sitemap regression or the strict live integration suite; those remain separate because they depend on mutable production data.
+
 ## Running the Crawler
 
 All crawler commands are defined in `package.json`:

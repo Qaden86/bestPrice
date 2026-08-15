@@ -1,6 +1,6 @@
 import express from 'express';
 import path from 'path';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn } from 'child_process';
 
 import { loadResults, loadResultsFromFile } from './loadResults';
 import { resultBus } from '../crawler/output/resultStore';
@@ -21,7 +21,6 @@ type ActiveRun = {
 };
 
 let activeRun: ActiveRun | null = null;
-let activeProcess: ChildProcess | null = null;
 
 const UI_PATH = path.resolve(__dirname, '../dashboard-ui');
 const INDEX_HTML = path.resolve(UI_PATH, 'index.html');
@@ -174,7 +173,6 @@ app.post('/api/runs/start', (req, res) => {
     detached: false,
   });
 
-  activeProcess = child;
   activeRun = {
     env,
     screenshots,
@@ -185,13 +183,11 @@ app.post('/api/runs/start', (req, res) => {
   child.on('exit', (code) => {
     console.log(`[run:${env}] exit code=${code}`);
     activeRun = null;
-    activeProcess = null;
   });
 
   child.on('error', (err) => {
     console.error(`[run:${env}] error`, err);
     activeRun = null;
-    activeProcess = null;
   });
 
   res.json({ started: true, active: activeRun });

@@ -10,7 +10,7 @@ import { waitForCartReady } from './utils/cartReady';
 import { dismissOverlays } from './utils/dismissOverlays';
 import { CrawlResult, TraceEvent } from './types/CrawlResult';
 import { SELECTORS } from './selectors/selectors';
-import type { PriceExtraction, AddToCartExtraction } from './types/extraction';
+import type { PriceExtraction } from './types/extraction';
 
 async function fail(
   page: Page,

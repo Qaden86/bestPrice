@@ -1,5 +1,5 @@
 # CI contract (see README § CI/CD):
-# - unit + playwright: required on every push/PR (PR gating).
+# - quality + playwright: required on every push/PR (PR gating).
 # - integration: intentionally excluded from PR gating — flaky on live prod data.
 #   Run manually: Actions → CI → Run workflow. Smoke (header, sitemap, crawl contract)
 #   remains mandatory on every PR.
@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  unit:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +29,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
       - run: npm run test:unit
 
   playwright:

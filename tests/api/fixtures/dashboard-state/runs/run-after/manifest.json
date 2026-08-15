@@ -1,0 +1,11 @@
+{
+  "runId": "run-after",
+  "startedAt": "2026-01-02T00:00:00.000Z",
+  "finishedAt": "2026-01-02T00:01:00.000Z",
+  "total": 2,
+  "ok": 2,
+  "failed": 0,
+  "reasons": {
+    "OK": 2
+  }
+}

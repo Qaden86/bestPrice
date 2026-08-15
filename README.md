@@ -42,6 +42,7 @@ The suite separates deterministic component checks from tests that depend on the
 | Test level   | Location             | Runner     | Scope                                                                                |
 | ------------ | -------------------- | ---------- | ------------------------------------------------------------------------------------ |
 | Unit         | `tests/unit/`        | Vitest     | Pure logic and controlled failure paths with mocked browser/file-system dependencies |
+| API          | `tests/api/`         | Playwright | Dashboard HTTP contracts against deterministic local data                            |
 | Integration  | `tests/integration/` | Playwright | Live product page through the complete PDP, cart, and validation flow                |
 | E2E          | `tests/e2e/`         | Playwright | Live crawler contract and sitemap-to-product JSON-LD price checks                    |
 | UI component | `tests/header/`      | Playwright | Desktop and mobile header controls, navigation, search, cart, and responsive menu    |
@@ -53,6 +54,16 @@ Vitest runs only `tests/unit/**/*.test.ts`. These tests isolate parsing, compari
 ### Integration tests
 
 `tests/integration/crawl.spec.ts` calls the real crawl pipeline against `BASE_URL` and `TEST_PRODUCT_SLUG`. It requires an `OK` result, numeric PDP and cart prices, and an exact price match. Because it depends on mutable live data, CI runs it only through manual workflow dispatch.
+
+### API tests
+
+`tests/api/` uses Playwright `APIRequestContext` without opening a browser. It checks current and archived dashboard results, aggregate statistics, run comparison, active-run state, empty unknown runs, and request validation. Playwright starts the Express server, waits for `/api/runs/active`, and stops it after the suite; checked-in fixtures keep the responses independent of live storefront data.
+
+```bash
+npm run test:api
+```
+
+The default base URL is `http://127.0.0.1:3100`. Set `API_BASE_URL` to change it. To test an already running server, also set `API_START_SERVER=false`.
 
 ### E2E tests
 
@@ -124,6 +135,7 @@ bestPrice/
 │   │   ├── validation/
 │   │   └── workers/
 │   ├── integration/
+│   ├── api/
 │   ├── e2e/
 │   └── header/
 ├── .github/workflows/ci.yml
@@ -166,21 +178,22 @@ Crawler concurrency, browser rotation, deadlines, retention, and screenshot sett
 
 These commands are defined in `package.json`:
 
-| Command                    | Execution                                             |
-| -------------------------- | ----------------------------------------------------- |
-| `npm test`                 | All Vitest tests selected by `vitest.config.ts`       |
-| `npm run test:unit`        | `tests/unit/` with Vitest                             |
-| `npm run test:watch`       | Vitest watch mode                                     |
-| `npm run test:integration` | Stage integration suite                               |
-| `npm run test:e2e`         | Stage E2E suite                                       |
-| `npm run test:header`      | Stage header suite                                    |
-| `npm run test:sitemap`     | Stage sitemap spec                                    |
-| `npm run test:all`         | Unit, integration, E2E, and header suites in sequence |
-| `npm run typecheck`        | TypeScript check without emitting files               |
-| `npm run lint`             | Type-aware ESLint checks                              |
-| `npm run lint:fix`         | Apply ESLint's safe automatic fixes                   |
-| `npm run format:check`     | Validate formatting with Prettier                     |
-| `npm run format`           | Format the repository with Prettier                   |
+| Command                    | Execution                                                |
+| -------------------------- | -------------------------------------------------------- |
+| `npm test`                 | All Vitest tests selected by `vitest.config.ts`          |
+| `npm run test:unit`        | `tests/unit/` with Vitest                                |
+| `npm run test:api`         | Dashboard API suite with an automatically managed server |
+| `npm run test:watch`       | Vitest watch mode                                        |
+| `npm run test:integration` | Stage integration suite                                  |
+| `npm run test:e2e`         | Stage E2E suite                                          |
+| `npm run test:header`      | Stage header suite                                       |
+| `npm run test:sitemap`     | Stage sitemap spec                                       |
+| `npm run test:all`         | Unit, integration, E2E, and header suites in sequence    |
+| `npm run typecheck`        | TypeScript check without emitting files                  |
+| `npm run lint`             | Type-aware ESLint checks                                 |
+| `npm run lint:fix`         | Apply ESLint's safe automatic fixes                      |
+| `npm run format:check`     | Validate formatting with Prettier                        |
+| `npm run format`           | Format the repository with Prettier                      |
 
 Playwright commands also have explicit `:stage` and `:prod` variants, such as:
 
@@ -222,6 +235,12 @@ Run the same live smoke coverage used by CI: the header suite, a 25-product site
 
 ```bash
 npm run docker:smoke
+```
+
+Run the browser-free API suite in the same image:
+
+```bash
+docker run --rm --init bestprice-tests npm run test:api
 ```
 
 The image contains the public production defaults used by CI. Override them at runtime when needed:
@@ -266,11 +285,12 @@ Crawl results are appended to `data/results.ndjson`. Completed runs are archived
 
 | Job           | Trigger                    | Checks                                                                         |
 | ------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| `api`         | Push, pull request, manual | Browser-free dashboard API contract suite                                      |
 | `quality`     | Push, pull request, manual | Install, TypeScript check, ESLint, Prettier validation, Vitest unit suite      |
 | `playwright`  | Push, pull request, manual | Chromium install, header suite, 25-product sitemap smoke, crawl contract smoke |
 | `integration` | Manual only                | Strict live PDP-to-cart crawl integration                                      |
 
-Every push and pull request is gated by TypeScript type checking, ESLint, Prettier formatting validation, unit tests, and the existing Playwright smoke checks. The workflow validates the live production URL. Integration is deliberately not a pull-request gate because its strict price assertion depends on current storefront data.
+Every push and pull request is gated by TypeScript type checking, ESLint, Prettier formatting validation, unit tests, dashboard API tests, and the existing Playwright smoke checks. The API job starts its own local server and does not install Chromium. The browser workflow validates the live production URL. Integration is deliberately not a pull-request gate because its strict price assertion depends on current storefront data.
 
 ## Reliability Features
 
@@ -291,6 +311,6 @@ Current, evidence-based gaps that would strengthen the project:
 - add coverage reporting and enforce an agreed minimum threshold in CI;
 - publish Allure reports or other test artifacts from GitHub Actions;
 - add deterministic integration coverage against controlled fixtures or a test environment to reduce dependence on live data;
-- add tests for dashboard API endpoints and SSE behavior;
+- add deterministic coverage for the dashboard SSE stream lifecycle;
 - add automated dependency and security scanning;
 - document contributor workflow and test-data maintenance in `CONTRIBUTING.md`.

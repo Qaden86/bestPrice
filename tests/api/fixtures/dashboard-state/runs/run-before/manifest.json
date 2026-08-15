@@ -1,0 +1,12 @@
+{
+  "runId": "run-before",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "finishedAt": "2026-01-01T00:01:00.000Z",
+  "total": 2,
+  "ok": 1,
+  "failed": 1,
+  "reasons": {
+    "PRICE_MISMATCH": 1,
+    "OK": 1
+  }
+}
